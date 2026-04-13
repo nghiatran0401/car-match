@@ -1,136 +1,109 @@
-# Vroom - Smart Dealership Platform
+# CarMatch
 
-## Overview
-A modern, AI-powered vehicle recommendation and dealership platform built with React, TypeScript, and TailwindCSS. This application provides smart vehicle matching, comparison tools, AI concierge chat, and seamless dealer connectivity.
+AI-assisted car matching and dealership flow built with React, TypeScript, and Tailwind CSS.
 
-## Features
+## Current Scope
 
-### Core Functionality
-- **Smart Recommendations**: AI-driven vehicle matching based on user preferences, lifestyle, and budget
-- **Comparison Matrix**: Side-by-side vehicle specification comparison
-- **AI Concierge Chat**: Conversational interface for vehicle inquiries and financing questions
-- **Vehicle Specifications**: Detailed model pages with comprehensive specs
-- **Finance Calculator**: Payment estimation tools
-- **Quote System**: Lead generation and dealer connection
-- **User Dashboard**: Account management and saved preferences
+CarMatch is a client-side web app focused on:
 
-### Technical Highlights
-- Built with React 18+ and TypeScript
-- Styled with TailwindCSS and custom design system
-- Responsive design (mobile-first)
-- Client-side routing with React Router
-- State management with React Context
-- Glassmorphism UI effects
-- Custom brand colors (amber/gold accents)
+- Guided buyer profiling (multi-step questionnaire)
+- Ranked vehicle recommendations
+- Vehicle detail pages and side-by-side comparison
+- Quote and booking lead capture flows
+- Showroom discovery with map interactions
+- AI concierge chat (Qwen-compatible API)
+- Bilingual UX (Vietnamese / English)
+- Lightweight analytics event buffering in `localStorage`
 
-## Project Structure
+## Routes Implemented
 
+- `/` - onboarding questionnaire
+- `/profile` - buyer profile overview
+- `/recommendations` - ranked shortlist and refinement
+- `/cars` - all vehicles listing
+- `/vehicle/:modelSlug` - vehicle detail page
+- `/compare` - vehicle comparison flow
+- `/quote` - quote request form
+- `/booking` - showroom booking form
+- `/showrooms` - showroom list + map
+- `/concierge` - full-page AI assistant
+- `/admin` - prompt/config control surface
+
+Redirects:
+
+- `/showroom` -> `/showrooms`
+- `/dashboard` -> `/profile`
+
+## Tech Stack
+
+- React 18 + TypeScript
+- Vite
+- React Router
+- Tailwind CSS
+- Leaflet + React Leaflet
+- Lucide icons
+
+## Branding (Current)
+
+Brand identity is centralized in `src/lib/brand.ts` and wired at runtime from `src/main.tsx`.
+
+- Brand name: `CarMatch`
+- Tagline: `Find Your Best-Fit Car, Faster`
+- Metadata + Open Graph + JSON-LD Organization schema are injected client-side
+- Theme tokens and semantic colors are defined in:
+  - `src/index.css` (CSS variables/components)
+  - `tailwind.config.js` (`brandHighlight`, `brandSecondary`)
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+VITE_QWEN_API_KEY=your_qwen_api_key_here
+VITE_QWEN_API_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+VITE_QWEN_MODEL=qwen-turbo
 ```
-/workspace
-├── src/
-│   ├── components/     # Reusable UI components
-│   ├── context/        # React Context providers (ProfileContext)
-│   ├── data/           # Vehicle data and constants
-│   ├── hooks/          # Custom React hooks
-│   ├── lib/            # Utility functions
-│   ├── pages/          # Page components
-│   │   ├── HomePage.tsx
-│   │   ├── RecommendationsPage.tsx
-│   │   ├── ConciergePage.tsx
-│   │   ├── DashboardPage.tsx
-│   │   ├── QuotePage.tsx
-│   │   └── SpecificationsPage.tsx
-│   ├── types/          # TypeScript type definitions
-│   ├── App.tsx         # Main app component with routing
-│   ├── main.tsx        # Application entry point
-│   └── index.css       # Global styles and Tailwind config
-├── public/             # Static assets
-├── dist/               # Production build output
-├── package.json        # Dependencies and scripts
-├── tailwind.config.js  # TailwindCSS configuration
-├── vite.config.ts      # Vite build configuration
-└── tsconfig.json       # TypeScript configuration
+
+Notes:
+
+- `VITE_QWEN_API_KEY` is required for live assistant replies.
+- Base URL and model are optional overrides.
+
+## Local Development
+
+```bash
+npm install
+npm run dev
 ```
 
-## Available Scripts
+Open the Vite URL shown in terminal (usually `http://localhost:5173`).
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-- `npm run lint` - Run ESLint
+## Scripts
 
-## Technology Stack
+- `npm run dev` - start local development server
+- `npm run build` - type-check and produce production build
+- `npm run preview` - preview production build locally
+- `npm run lint` - run ESLint
 
-- **Frontend Framework**: React 18.3.1
-- **Language**: TypeScript 5.5.4
-- **Build Tool**: Vite 5.4.0
-- **Styling**: TailwindCSS 3.4.7
-- **Routing**: React Router DOM 6.26.0
-- **Icons**: Lucide React 0.424.0
-- **Utilities**: clsx, tailwind-merge
+## Project Structure (High Level)
 
-## Design System
+```text
+src/
+  components/      # Shared UI pieces (shell, chat widget, media, etc.)
+  context/         # Profile, compare, and language state providers
+  data/            # Vehicles, wizard steps, showrooms
+  layouts/         # Main route layout
+  lib/             # AI, branding, analytics, scoring, lead helpers
+  pages/           # Route-level pages
+  types/           # Shared TypeScript types
+```
 
-### Brand Colors
-- **Brand Highlight**: Amber/Gold (#ffb71a primary)
-- **Brand Secondary**: Slate/Gray scale
-- Custom color palette defined in Tailwind config
+## Current Limitations
 
-### Typography
-- Font Family: Plus Jakarta Sans
-- Weights: 300-800
-- Google Fonts integration
-
-### UI Components
-- Glassmorphism effects (glass, glass-dark utilities)
-- Rounded corners (2xl, 3xl, custom radii)
-- Gradient backgrounds
-- Shadow effects
-- Smooth transitions and animations
-
-## Current Implementation Status
-
-### ✅ Completed
-- [x] Project setup and configuration
-- [x] Routing structure (6 pages)
-- [x] Home page with hero section and features
-- [x] Recommendations page with filtering logic
-- [x] AI Concierge chat interface
-- [x] Vehicle specifications page
-- [x] Quote request form
-- [x] Dashboard placeholder
-- [x] Profile context with localStorage persistence
-- [x] Vehicle data models (9 vehicles)
-- [x] Responsive design
-- [x] Production build successful
-
-### 🔄 Ready for Enhancement
-- [ ] Additional reusable components (buttons, cards, inputs)
-- [ ] Finance calculator implementation
-- [ ] Authentication system
-- [ ] Backend API integration
-- [ ] Database connection
-- [ ] Real AI integration (Vercel AI SDK)
-- [ ] Test suite
-- [ ] Performance optimizations
-
-## Deployment
-
-The application is configured for deployment on Vercel:
-- Production build available in `/dist`
-- Static file hosting ready
-- Client-side routing configured
-
-## Next Steps for MVP
-
-1. **Component Library**: Build out shadcn/ui-style component library
-2. **Enhanced Forms**: Add validation to quote and contact forms
-3. **Finance Calculator**: Implement payment calculation logic
-4. **Image Assets**: Add official vehicle images
-5. **Animations**: Add Framer Motion for smooth transitions
-6. **SEO**: Add meta tags and Open Graph data
-7. **Analytics**: Integrate analytics tracking
-8. **Testing**: Add unit and E2E tests
+- No backend persistence yet (most state is local/session storage)
+- No automated test suite committed yet
+- AI concierge depends on external Qwen API availability/key setup
 
 ## License
-Private - All rights reserved
+
+Private repository. All rights reserved.
