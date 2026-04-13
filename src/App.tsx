@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ProfileProvider } from './context/ProfileContext';
 import { CompareProvider } from './context/CompareContext';
 import { LanguageProvider } from './context/LanguageContext';
@@ -15,11 +16,22 @@ import BookingPage from './pages/BookingPage';
 import AdminPage from './pages/AdminPage';
 import CarsPage from './pages/CarsPage';
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+  }, [pathname]);
+
+  return null;
+}
+
 function App() {
   return (
     <LanguageProvider>
       <ProfileProvider>
         <CompareProvider>
+          <ScrollToTop />
           <Routes>
             <Route element={<MainLayout />}>
               <Route path="/" element={<HomePage />} />

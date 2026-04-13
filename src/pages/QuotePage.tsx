@@ -143,7 +143,7 @@ export default function QuotePage() {
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <form onSubmit={submit} className="surface p-4 sm:p-5">
+      <form onSubmit={submit} className="order-2 surface p-4 sm:p-5 xl:order-1">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="kicker">{t({ vi: 'Showroom', en: 'Showroom' })}</p>
@@ -153,7 +153,11 @@ export default function QuotePage() {
                 : t({ vi: 'Báo giá xe', en: 'Vehicle Quote' })}
             </h1>
           </div>
-          <button type="submit" disabled={!vehicle} className="btn-primary px-4 py-2 text-sm disabled:bg-slate-300">
+          <button
+            type="submit"
+            disabled={!vehicle}
+            className="btn-primary min-h-[42px] w-full px-4 py-2 text-sm disabled:bg-slate-300 sm:w-auto"
+          >
             {t({ vi: 'Tiếp tục', en: 'Move Forward' })}
           </button>
         </div>
@@ -234,7 +238,8 @@ export default function QuotePage() {
           <h2 className="mb-2 text-sm font-bold text-slate-900">
             {t({ vi: 'Xe & Hệ truyền động', en: 'Vehicle & Powertrain' })}
           </h2>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="min-w-[560px] w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-2 py-2 text-left">{t({ vi: 'Danh mục', en: 'Category' })}</th>
@@ -250,13 +255,15 @@ export default function QuotePage() {
               </tr>
             </tbody>
           </table>
+          </div>
         </section>
 
         <section className="mt-4 rounded-xl border border-slate-200 p-3">
           <h2 className="mb-2 text-sm font-bold text-slate-900">
             {t({ vi: 'Tùy chọn đã chọn', en: 'Selected Options' })}
           </h2>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="min-w-[560px] w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-2 py-2 text-left">{t({ vi: 'Danh mục', en: 'Category' })}</th>
@@ -272,13 +279,15 @@ export default function QuotePage() {
               </tr>
             </tbody>
           </table>
+          </div>
         </section>
 
         <section className="mt-4 rounded-xl border border-slate-200 p-3">
           <h2 className="mb-2 text-sm font-bold text-slate-900">
             {t({ vi: 'Thuế, phí & chi phí bàn giao', en: 'Taxes, Fees & Delivery Extras' })}
           </h2>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="min-w-[560px] w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-2 py-2 text-left">{t({ vi: 'Danh mục', en: 'Category' })}</th>
@@ -319,6 +328,7 @@ export default function QuotePage() {
               </tr>
             </tbody>
           </table>
+          </div>
         </section>
 
         <section className="mt-4 rounded-xl border border-slate-200 p-3">
@@ -346,7 +356,7 @@ export default function QuotePage() {
         </section>
       </form>
 
-      <aside className="surface h-fit p-4 sm:p-5 xl:sticky xl:top-24">
+      <aside className="order-1 surface h-fit p-4 sm:p-5 xl:order-2 xl:sticky xl:top-24">
         <p className="text-sm text-slate-500">{t({ vi: 'Giá hiện tại / ước tính', en: 'Current estimate' })}</p>
         <h2 className="mt-1 text-xl font-bold text-slate-900">{vehicle?.name ?? t({ vi: 'Chưa chọn xe', en: 'No vehicle selected' })}</h2>
         <p className="text-sm text-slate-600">{vehicle?.trim ?? '-'}</p>

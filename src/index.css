@@ -68,6 +68,10 @@ body {
   .card-hover {
     @apply transition duration-200 hover:-translate-y-0.5 hover:shadow-md;
   }
+  .defer-render {
+    content-visibility: auto;
+    contain-intrinsic-size: 320px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

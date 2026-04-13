@@ -5,6 +5,9 @@ interface VehicleImageProps {
   alt: string;
   className?: string;
   fallbackSources?: string[];
+  loading?: 'lazy' | 'eager';
+  sizes?: string;
+  fetchPriority?: 'high' | 'low' | 'auto';
 }
 
 function makeFallbackDataUri(label: string): string {
@@ -23,7 +26,15 @@ function makeFallbackDataUri(label: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-export default function VehicleImage({ src, alt, className, fallbackSources = [] }: VehicleImageProps) {
+export default function VehicleImage({
+  src,
+  alt,
+  className,
+  fallbackSources = [],
+  loading = 'lazy',
+  sizes,
+  fetchPriority = 'auto',
+}: VehicleImageProps) {
   const fallbackSrc = useMemo(() => makeFallbackDataUri(alt), [alt]);
   const sources = useMemo(() => [src, ...fallbackSources], [fallbackSources, src]);
   const [sourceIndex, setSourceIndex] = useState(0);
@@ -48,8 +59,10 @@ export default function VehicleImage({ src, alt, className, fallbackSources = []
     <img
       src={currentSrc}
       alt={alt}
-      loading="lazy"
+      loading={loading}
       decoding="async"
+      fetchPriority={fetchPriority}
+      sizes={sizes}
       onError={handleError}
       className={className}
     />

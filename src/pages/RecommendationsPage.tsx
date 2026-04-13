@@ -171,7 +171,7 @@ export default function RecommendationsPage() {
           </div>
         </div>
 
-        <div className="mb-4 grid gap-2 md:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr]">
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr]">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {t({ vi: 'Tìm kiếm', en: 'Search' })}
             <input
@@ -240,11 +240,12 @@ export default function RecommendationsPage() {
             const { vehicle, score, reasons, budgetPenalty } = item;
             const inCompare = isInCompare(vehicle.id);
             return (
-              <article key={vehicle.id} className={clsx('card-hover rounded-2xl border bg-white p-3', budgetPenalty ? 'border-amber-300' : 'border-slate-200')}>
+              <article key={vehicle.id} className={clsx('defer-render card-hover rounded-2xl border bg-white p-3', budgetPenalty ? 'border-amber-300' : 'border-slate-200')}>
                 <VehicleImage
                   src={getVehicleImage(vehicle.modelSlug)}
                   fallbackSources={getVehicleImageSources(vehicle.modelSlug).slice(1)}
                   alt={vehicle.name}
+                  sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
                   className="aspect-[1.35/1] w-full rounded-xl object-cover"
                 />
                 <div className="mt-3 flex items-start justify-between gap-2">
@@ -261,11 +262,11 @@ export default function RecommendationsPage() {
                     <li key={i}>• {r}</li>
                   ))}
                 </ul>
-                <div className="mt-3 grid grid-cols-3 gap-2">
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <Link
                     to={`/vehicle/${vehicle.modelSlug}`}
                     onClick={() => trackEvent('recommendation_clicked', { vehicleModelSlug: vehicle.modelSlug })}
-                    className="btn-primary px-3 py-2 text-center text-xs"
+                    className="btn-primary min-h-[40px] px-3 py-2 text-center text-xs"
                   >
                     {t({ vi: 'Chi tiết', en: 'Details' })}
                   </Link>
@@ -273,13 +274,13 @@ export default function RecommendationsPage() {
                     type="button"
                     onClick={() => toggleVehicle(vehicle.id)}
                     className={clsx(
-                      'rounded-full border px-3 py-2 text-xs font-semibold',
+                      'min-h-[40px] rounded-full border px-3 py-2 text-xs font-semibold',
                       inCompare ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-700',
                     )}
                   >
                     {inCompare ? t({ vi: 'Đang so sánh', en: 'In compare' }) : t({ vi: 'So sánh', en: 'Compare' })}
                   </button>
-                  <Link to={`/quote?model=${vehicle.modelSlug}`} className="btn-secondary border-slate-900 px-3 py-2 text-center text-xs text-slate-900">
+                  <Link to={`/quote?model=${vehicle.modelSlug}`} className="btn-secondary col-span-2 min-h-[40px] border-slate-900 px-3 py-2 text-center text-xs text-slate-900 sm:col-span-1">
                     {t({ vi: 'Báo giá', en: 'Quote' })}
                   </Link>
                 </div>
@@ -288,6 +289,13 @@ export default function RecommendationsPage() {
           })}
         </div>
       </main>
+      {count > 0 ? (
+        <div className="fixed inset-x-4 bottom-[calc(6.8rem+env(safe-area-inset-bottom))] z-30 md:hidden">
+          <Link to="/compare" className="btn-primary flex min-h-[44px] w-full items-center justify-center shadow-lg">
+            {t({ vi: 'Mở so sánh', en: 'Open compare' })} ({count})
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }

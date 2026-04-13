@@ -183,6 +183,9 @@ export default function VehicleDetailPage() {
               src={gallery[imgIdx]}
               fallbackSources={imgIdx === 0 ? getVehicleImageSources(vehicle.modelSlug).slice(1) : []}
               alt={vehicle.name}
+              loading={imgIdx === 0 ? 'eager' : 'lazy'}
+              fetchPriority={imgIdx === 0 ? 'high' : 'auto'}
+              sizes="(max-width: 1280px) 100vw, 42vw"
               className="aspect-[16/10] w-full rounded-2xl object-cover"
             />
             <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
@@ -193,7 +196,14 @@ export default function VehicleDetailPage() {
                   onClick={() => setImgIdx(i)}
                   className={i === imgIdx ? 'h-16 w-24 rounded-xl border-2 border-slate-900 overflow-hidden' : 'h-16 w-24 rounded-xl border-2 border-transparent overflow-hidden opacity-80'}
                 >
-                  <VehicleImage src={src} alt={`${vehicle.name} view ${i + 1}`} className="h-full w-full object-cover" />
+                  <VehicleImage
+                    src={src}
+                    alt={`${vehicle.name} view ${i + 1}`}
+                    loading="lazy"
+                    fetchPriority="low"
+                    sizes="96px"
+                    className="h-full w-full object-cover"
+                  />
                 </button>
               ))}
             </div>

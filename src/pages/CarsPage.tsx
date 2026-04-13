@@ -84,7 +84,7 @@ export default function CarsPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-2 md:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr]">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr]">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {t({ vi: 'Tìm kiếm', en: 'Search' })}
             <input
@@ -145,11 +145,12 @@ export default function CarsPage() {
           const vehicle = item.localized;
           const inCompare = isInCompare(vehicle.id);
           return (
-            <article key={vehicle.id} className="card-hover rounded-2xl border border-slate-200 bg-white p-3">
+            <article key={vehicle.id} className="defer-render card-hover rounded-2xl border border-slate-200 bg-white p-3">
               <VehicleImage
                 src={getVehicleImage(vehicle.modelSlug)}
                 fallbackSources={getVehicleImageSources(vehicle.modelSlug).slice(1)}
                 alt={vehicle.name}
+                sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
                 className="aspect-[1.35/1] w-full rounded-xl object-cover"
               />
               <div className="mt-3">
@@ -158,15 +159,15 @@ export default function CarsPage() {
               </div>
               <p className="mt-2 text-xs text-slate-600">{vehicle.priceBand}</p>
               <p className="mt-2 text-sm text-slate-700">{vehicle.thesis}</p>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <Link to={`/vehicle/${vehicle.modelSlug}`} className="btn-primary px-3 py-2 text-center text-xs">
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <Link to={`/vehicle/${vehicle.modelSlug}`} className="btn-primary min-h-[40px] px-3 py-2 text-center text-xs">
                   {t({ vi: 'Chi tiết', en: 'Details' })}
                 </Link>
                 <button
                   type="button"
                   onClick={() => toggleVehicle(vehicle.id)}
                   className={cx(
-                    'rounded-full border px-3 py-2 text-xs font-semibold',
+                    'min-h-[40px] rounded-full border px-3 py-2 text-xs font-semibold',
                     inCompare ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-700',
                   )}
                 >
@@ -174,7 +175,7 @@ export default function CarsPage() {
                 </button>
                 <Link
                   to={`/quote?model=${vehicle.modelSlug}`}
-                  className="btn-secondary border-slate-900 px-3 py-2 text-center text-xs text-slate-900"
+                  className="btn-secondary col-span-2 min-h-[40px] border-slate-900 px-3 py-2 text-center text-xs text-slate-900 sm:col-span-1"
                 >
                   {t({ vi: 'Báo giá', en: 'Quote' })}
                 </Link>
@@ -183,6 +184,13 @@ export default function CarsPage() {
           );
         })}
       </section>
+      {count > 0 ? (
+        <div className="fixed inset-x-4 bottom-[calc(6.8rem+env(safe-area-inset-bottom))] z-30 md:hidden">
+          <Link to="/compare" className="btn-primary flex min-h-[44px] w-full items-center justify-center shadow-lg">
+            {t({ vi: 'Mở so sánh', en: 'Open compare' })} ({count})
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
