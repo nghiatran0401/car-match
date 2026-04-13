@@ -2,74 +2,159 @@ import { createContext, useContext, useState, useCallback, useEffect } from 'rea
 import type { UserProfile, SelectionHistory, Vehicle } from '../types';
 import { vehicles } from '../data/vehicles';
 
+const STORAGE_KEY = 'carmatch-profile-bundle';
+
+export interface OnboardingState {
+  stepIndex: number;
+  answeredFlags: [boolean, boolean, boolean, boolean, boolean];
+}
+
+interface ProfileBundle {
+  profile: UserProfile;
+  onboarding: OnboardingState;
+}
+
 interface ProfileContextType {
   profile: UserProfile;
+  onboarding: OnboardingState;
   isHydrated: boolean;
-  isComplete: boolean;
+  answeredCount: number;
   updateProfile: (updates: Partial<UserProfile>) => void;
   resetProfile: () => void;
   setSelections: React.Dispatch<React.SetStateAction<SelectionHistory[]>>;
   selections: SelectionHistory[];
   activeFilters: Partial<UserProfile> | null;
   setActiveFilters: React.Dispatch<React.SetStateAction<Partial<UserProfile> | null>>;
+  setOnboarding: React.Dispatch<React.SetStateAction<OnboardingState>>;
+  clearWizardAnswers: () => void;
 }
 
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 
-const defaultProfile: UserProfile = {
-  lifeStage: 'young-professional',
-  primaryUseNeed: 'urban-commute',
-  drivingMix: 'city-heavy',
-  financeIntent: 'value-conscious',
+const defaultProfile: UserProfile = {};
+
+const defaultOnboarding: OnboardingState = {
+  stepIndex: 0,
+  answeredFlags: [false, false, false, false, false],
 };
+
+function loadBundle(): ProfileBundle {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Partial<ProfileBundle>;
+      if (parsed && typeof parsed === 'object' && parsed.profile) {
+        return {
+          profile: { ...defaultProfile, ...parsed.profile },
+          onboarding: {
+            stepIndex: Math.min(
+              5,
+              Math.max(0, Number(parsed.onboarding?.stepIndex) || 0),
+            ),
+            answeredFlags: normalizeFlags(parsed.onboarding?.answeredFlags),
+          },
+        };
+      }
+    } catch (e) {
+      console.error('Failed to parse saved profile bundle', e);
+    }
+  }
+
+  const legacy = localStorage.getItem('vroom-profile');
+  if (legacy) {
+    try {
+      const profile = JSON.parse(legacy) as UserProfile;
+      return { profile: { ...defaultProfile, ...profile }, onboarding: defaultOnboarding };
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { profile: defaultProfile, onboarding: defaultOnboarding };
+}
+
+function normalizeFlags(flags: unknown): [boolean, boolean, boolean, boolean, boolean] {
+  if (!Array.isArray(flags) || flags.length < 5) {
+    return [false, false, false, false, false];
+  }
+  return [
+    Boolean(flags[0]),
+    Boolean(flags[1]),
+    Boolean(flags[2]),
+    Boolean(flags[3]),
+    Boolean(flags[4]),
+  ];
+}
+
+function saveBundle(profile: UserProfile, onboarding: OnboardingState) {
+  const payload: ProfileBundle = { profile, onboarding };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
 
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
+  const [onboarding, setOnboarding] = useState<OnboardingState>(defaultOnboarding);
   const [isHydrated, setIsHydrated] = useState(false);
   const [selections, setSelections] = useState<SelectionHistory[]>([]);
   const [activeFilters, setActiveFilters] = useState<Partial<UserProfile> | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('vroom-profile');
-    if (saved) {
-      try {
-        setProfile(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse saved profile', e);
-      }
-    }
+    const bundle = loadBundle();
+    setProfile(bundle.profile);
+    setOnboarding(bundle.onboarding);
     setIsHydrated(true);
   }, []);
 
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveBundle(profile, onboarding);
+  }, [profile, onboarding, isHydrated]);
+
   const updateProfile = useCallback((updates: Partial<UserProfile>) => {
-    setProfile(prev => {
-      const next = { ...prev, ...updates };
-      localStorage.setItem('vroom-profile', JSON.stringify(next));
-      return next;
-    });
+    setProfile(prev => ({ ...prev, ...updates }));
   }, []);
 
   const resetProfile = useCallback(() => {
     setProfile(defaultProfile);
-    localStorage.removeItem('vroom-profile');
+    setOnboarding(defaultOnboarding);
     setSelections([]);
     setActiveFilters(null);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('vroom-profile');
+    localStorage.removeItem('carmatch-compare-ids');
+    window.dispatchEvent(new Event('carmatch:compare-reset'));
   }, []);
 
-  const isComplete = true;
+  const clearWizardAnswers = useCallback(() => {
+    setProfile(prev => ({
+      ...prev,
+      lifeStage: undefined,
+      primaryUseNeed: undefined,
+      drivingMix: undefined,
+      financeIntent: undefined,
+      budgetBand: undefined,
+      powertrains: undefined,
+    }));
+    setOnboarding(defaultOnboarding);
+  }, []);
+
+  const answeredCount = onboarding.answeredFlags.filter(Boolean).length;
 
   return (
     <ProfileContext.Provider
       value={{
         profile,
+        onboarding,
         isHydrated,
-        isComplete,
+        answeredCount,
         updateProfile,
         resetProfile,
         selections,
         setSelections,
         activeFilters,
         setActiveFilters,
+        setOnboarding,
+        clearWizardAnswers,
       }}
     >
       {children}
@@ -93,7 +178,7 @@ export function filterVehicles(filters: Partial<UserProfile>): Vehicle[] {
     if (filters.sizes && filters.sizes.length > 0) {
       if (!filters.sizes.includes(vehicle.size)) return false;
     }
-    if (filters.powertrains && filters.powertrains.length > 0) {
+    if (filters.powertrains !== undefined && filters.powertrains.length > 0) {
       if (!filters.powertrains.includes(vehicle.powertrain)) return false;
     }
     if (filters.fuelTypes && filters.fuelTypes.length > 0) {

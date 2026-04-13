@@ -1,10 +1,11 @@
 import type { Vehicle } from '../types';
+import type { AppLanguage } from '../context/LanguageContext';
 
 export const vehicles: Vehicle[] = [
   {
     id: "ex5-smart-ev",
     modelSlug: "ex5",
-    name: "Vroom EX5",
+    name: "CarMatch EX5",
     trim: "Long Range AWD",
     bodyStyle: "Smart electric crossover",
     vehicleType: "crossover",
@@ -12,6 +13,7 @@ export const vehicles: Vehicle[] = [
     powertrain: "ev",
     fuelType: "electric",
     priceBand: "From 999m VND",
+    priceEntryMilVnd: 999,
     thesis: "EX5 brings smart-EV value to the table, with a focus on urban usability, tech-forward features, and accessible pricing for first-time EV buyers.",
     strengths: [
       "Best value EV in shortlist",
@@ -32,7 +34,7 @@ export const vehicles: Vehicle[] = [
   {
     id: "monjaro-executive-suv",
     modelSlug: "monjaro",
-    name: "Vroom Monjaro",
+    name: "CarMatch Monjaro",
     trim: "Executive AWD",
     bodyStyle: "Executive SUV",
     vehicleType: "suv",
@@ -40,6 +42,7 @@ export const vehicles: Vehicle[] = [
     powertrain: "ice",
     fuelType: "petrol",
     priceBand: "From 1.599b VND",
+    priceEntryMilVnd: 1599,
     thesis: "Monjaro is the balanced executive SUV here, offering strong refinement, long-distance comfort, and a premium feel without moving into flagship pricing.",
     strengths: [
       "Refined ride quality",
@@ -68,6 +71,7 @@ export const vehicles: Vehicle[] = [
     powertrain: "phev",
     fuelType: "hybrid",
     priceBand: "From 2.199b VND",
+    priceEntryMilVnd: 2199,
     thesis: "The 09 is the three-row flagship for buyers who need maximum space, plug-in flexibility, and a more elevated ownership proposition.",
     strengths: [
       "Three-row seating",
@@ -88,7 +92,7 @@ export const vehicles: Vehicle[] = [
   {
     id: "coolray-urban-value",
     modelSlug: "coolray",
-    name: "Vroom Coolray",
+    name: "CarMatch Coolray",
     trim: "Sport AWD",
     bodyStyle: "Compact sporty SUV",
     vehicleType: "suv",
@@ -96,7 +100,8 @@ export const vehicles: Vehicle[] = [
     powertrain: "ice",
     fuelType: "petrol",
     priceBand: "From 899m VND",
-    thesis: "Coolray is the entry point into the Vroom ecosystem, targeting young urban buyers who want style, tech, and manageable running costs.",
+    priceEntryMilVnd: 899,
+    thesis: "Coolray is the entry point into the CarMatch ecosystem, targeting young urban buyers who want style, tech, and manageable running costs.",
     strengths: [
       "Most affordable option",
       "Youthful design",
@@ -124,6 +129,7 @@ export const vehicles: Vehicle[] = [
     powertrain: "phev",
     fuelType: "hybrid",
     priceBand: "From 1.199b VND",
+    priceEntryMilVnd: 1199,
     thesis: "The 06 sits between value and premium, offering PHEV efficiency in a compact package that's easy to live with in the city.",
     strengths: [
       "PHEV efficiency",
@@ -152,6 +158,7 @@ export const vehicles: Vehicle[] = [
     powertrain: "hybrid",
     fuelType: "hybrid",
     priceBand: "From 1.399b VND",
+    priceEntryMilVnd: 1399,
     thesis: "The 01 is the balanced choice in the lineup, blending hybrid efficiency, premium touches, and everyday practicality.",
     strengths: [
       "Hybrid efficiency",
@@ -180,6 +187,7 @@ export const vehicles: Vehicle[] = [
     powertrain: "phev",
     fuelType: "hybrid",
     priceBand: "From 1.899b VND",
+    priceEntryMilVnd: 1899,
     thesis: "The 08 is the tech-forward flagship, combining cutting-edge infotainment, PHEV performance, and a futuristic design language.",
     strengths: [
       "Cutting-edge tech",
@@ -208,6 +216,7 @@ export const vehicles: Vehicle[] = [
     powertrain: "ev",
     fuelType: "electric",
     priceBand: "From 1.779b VND",
+    priceEntryMilVnd: 1779,
     thesis: "EC40 is the premium EV flagship here, with the strongest acceleration, official Volvo Vietnam backing, and a more brand-led arrival experience.",
     strengths: [
       "Premium EV flagship",
@@ -236,6 +245,7 @@ export const vehicles: Vehicle[] = [
     powertrain: "ice",
     fuelType: "petrol",
     priceBand: "From 1.899b VND",
+    priceEntryMilVnd: 1899,
     thesis: "The 03+ is the emotional-performance wildcard in the shortlist, giving buyers a true sports-sedan identity instead of another premium SUV.",
     strengths: [
       "Most driver-focused option",
@@ -290,6 +300,42 @@ export const recommendationStages = [
   }
 ];
 
+const recommendationStagesVi = [
+  {
+    key: 'focus',
+    title: 'Trọng tâm danh sách đề xuất',
+    prompt:
+      'Để thu gọn danh sách, bạn muốn ưu tiên giá trị đi phố, hiệu quả EV, sự thoải mái SUV hạng sang hay hình ảnh flagship?',
+    helper: 'Hệ thống giữ khung so sánh gốc và thu gọn về 3 lựa chọn mạnh nhất.',
+    options: [
+      {
+        id: 'value-city',
+        label: 'Giá trị và đi phố',
+        hint: 'Ưu tiên nhóm xe chi phí hợp lý, dễ dùng trong đô thị.',
+        nextRecommendationIds: ['lynkco-06-urban-premium', 'coolray-urban-value', 'lynkco-01-balanced-suv'],
+      },
+      {
+        id: 'ev-first',
+        label: 'Ưu tiên EV',
+        hint: 'Thiên về xe điện và tính thuận tiện khi sạc.',
+        nextRecommendationIds: ['ex5-smart-ev', 'lynkco-08-hybrid-flagship', 'ec40-premium-ev'],
+      },
+      {
+        id: 'executive-suv',
+        label: 'SUV thoải mái',
+        hint: 'Tập trung khả năng đi xa và độ êm cho hành khách.',
+        nextRecommendationIds: ['monjaro-executive-suv', 'lynkco-09-premium-suv', 'lynkco-08-hybrid-flagship'],
+      },
+      {
+        id: 'premium-flagship',
+        label: 'Cao cấp flagship',
+        hint: 'Giữ các lựa chọn có trải nghiệm cao cấp nhất.',
+        nextRecommendationIds: ['ec40-premium-ev', 'lynkco-03plus-performance', 'lynkco-09-premium-suv'],
+      },
+    ],
+  },
+];
+
 export const comparisonCriteriaFull = [
   { key: "budgetFit", label: "Budget fit" },
   { key: "range", label: "Range / powertrain" },
@@ -300,8 +346,36 @@ export const comparisonCriteriaFull = [
   { key: "ownershipPath", label: "Ownership path" }
 ];
 
+const comparisonCriteriaFullVi = [
+  { key: 'budgetFit', label: 'Phù hợp ngân sách' },
+  { key: 'range', label: 'Tầm hoạt động / động cơ' },
+  { key: 'charging', label: 'Thói quen sạc' },
+  { key: 'cityDriving', label: 'Đi đô thị' },
+  { key: 'highwayComfort', label: 'Êm ái đường dài' },
+  { key: 'cabinFlexibility', label: 'Độ linh hoạt khoang cabin' },
+  { key: 'ownershipPath', label: 'Định hướng sở hữu' },
+];
+
 export const comparisonCriteriaShort = [
   { key: "budgetFit", label: "Budget fit" },
   { key: "range", label: "Range / powertrain" },
   { key: "ownershipPath", label: "Ownership path" }
 ];
+
+const comparisonCriteriaShortVi = [
+  { key: 'budgetFit', label: 'Phù hợp ngân sách' },
+  { key: 'range', label: 'Tầm hoạt động / động cơ' },
+  { key: 'ownershipPath', label: 'Định hướng sở hữu' },
+];
+
+export function getRecommendationStages(language: AppLanguage) {
+  return language === 'vi' ? recommendationStagesVi : recommendationStages;
+}
+
+export function getComparisonCriteriaFull(language: AppLanguage) {
+  return language === 'vi' ? comparisonCriteriaFullVi : comparisonCriteriaFull;
+}
+
+export function getComparisonCriteriaShort(language: AppLanguage) {
+  return language === 'vi' ? comparisonCriteriaShortVi : comparisonCriteriaShort;
+}

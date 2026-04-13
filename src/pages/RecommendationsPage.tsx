@@ -1,362 +1,297 @@
-import { useState, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useProfile } from '../context/ProfileContext';
-import type { SelectionHistory, Vehicle } from '../types';
-import { vehicles, recommendationStages, comparisonCriteriaShort } from '../data/vehicles';
-
-// Helper to get vehicle image
-function getVehicleImage(modelSlug: string): string {
-  const images: Record<string, string> = {
-    ex5: 'https://images.unsplash.com/photo-1619767886432-60864512d327?w=800&h=600&fit=crop',
-    monjaro: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=800&h=600&fit=crop',
-    'lynk-co-09': 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&h=600&fit=crop',
-    coolray: 'https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&h=600&fit=crop',
-    'lynk-co-06': 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800&h=600&fit=crop',
-    'lynk-co-01': 'https://images.unsplash.com/photo-1552519507-cf0d5a6e5d0d?w=800&h=600&fit=crop',
-    'lynk-co-08': 'https://images.unsplash.com/photo-1502877338535-766e1452684a?w=800&h=600&fit=crop',
-    ec40: 'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800&h=600&fit=crop',
-    'lynk-co-03': 'https://images.unsplash.com/photo-1555215695-3004980adade?w=800&h=600&fit=crop',
-  };
-  return images[modelSlug] || images.ex5;
-}
-
-// Generate match score
-function calculateMatchScore(vehicle: Vehicle, profile: any, selections: SelectionHistory[]): number {
-  let score = 76;
-  const matchedTags = vehicle.matchTags.filter(tag => profile[tag]).length;
-  score += matchedTags * 5;
-  score += selections.length * 2;
-  
-  // Add some variation based on vehicle ID
-  const hash = vehicle.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  score += (hash % 7) - 3;
-  
-  // Boost certain vehicles
-  if (vehicle.id === 'monjaro-executive-suv') score += 4;
-  
-  return Math.max(74, Math.min(98, score));
-}
+import { useCompare } from '../context/CompareContext';
+import { getRecommendationStages, vehicles } from '../data/vehicles';
+import { rankAndSort } from '../lib/recommendationScore';
+import { getVehicleImage, getVehicleImageSources } from '../lib/vehicleMedia';
+import { trackEvent } from '../lib/analytics';
+import { useLanguage } from '../context/LanguageContext';
+import { localizeVehicle } from '../lib/localizedVehicle';
+import VehicleImage from '../components/VehicleImage';
 
 export default function RecommendationsPage() {
-  const { profile, isHydrated, resetProfile, selections, setSelections, activeFilters, setActiveFilters } = useProfile();
-  const [currentStageKey, setCurrentStageKey] = useState<string>('focus');
-  const [pendingPrompt, setPendingPrompt] = useState<{ id: string; text: string } | null>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const { language, t } = useLanguage();
+  const { profile, isHydrated, selections, setSelections, activeFilters, setActiveFilters } = useProfile();
+  const { toggleVehicle, isInCompare, count } = useCompare();
+  const [currentStageKey] = useState('focus');
+  const [activeFocusId, setActiveFocusId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'best-match' | 'price-low' | 'price-high' | 'name-az'>('best-match');
+  const [vehicleTypeFilter, setVehicleTypeFilter] = useState<'all' | 'sedan' | 'suv' | 'crossover' | 'hatchback'>('all');
+  const [powertrainFilter, setPowertrainFilter] = useState<'all' | 'ice' | 'hybrid' | 'phev' | 'ev'>('all');
 
-  const currentStage = useMemo(() => 
-    recommendationStages.find(s => s.key === currentStageKey) || null,
-    [currentStageKey]
-  );
+  const recommendationStages = useMemo(() => getRecommendationStages(language), [language]);
+  const currentStage = recommendationStages.find(s => s.key === currentStageKey) ?? recommendationStages[0];
 
-  // Filter vehicles based on active filters or stage selection
-  const filteredVehicles = useMemo(() => {
-    let result = vehicles;
-    
-    if (activeFilters) {
-      if (activeFilters.vehicleTypes?.length) {
-        result = result.filter(v => activeFilters.vehicleTypes!.includes(v.vehicleType));
-      }
-      if (activeFilters.powertrains?.length) {
-        result = result.filter(v => activeFilters.powertrains!.includes(v.powertrain));
-      }
+  const baseFiltered = useMemo(() => {
+    let list = vehicles;
+    if (activeFilters?.vehicleTypes?.length) {
+      list = list.filter(v => activeFilters.vehicleTypes?.includes(v.vehicleType));
     }
-    
-    return result;
+    if (activeFilters?.powertrains?.length) {
+      list = list.filter(v => activeFilters.powertrains?.includes(v.powertrain));
+    }
+    return list;
   }, [activeFilters]);
 
-  const isComparisonMode = filteredVehicles.length <= 3;
+  const shortlist = useMemo(() => {
+    let ranked = rankAndSort(baseFiltered, profile, selections, language).map(item => ({
+      ...item,
+      vehicle: localizeVehicle(item.vehicle, language),
+    }));
 
-  const handleOptionSelect = (optionId: string) => {
-    if (!currentStage) return;
-    
-    const option = currentStage.options.find(o => o.id === optionId);
-    if (!option) return;
-
-    setSelections(prev => [...prev, {
-      stageTitle: currentStage.title,
-      label: option.label
-    }]);
-
-    // Apply filters based on selected option
-    const selectedVehicles = vehicles.filter(v => option.nextRecommendationIds.includes(v.id));
-    const powertrains = [...new Set(selectedVehicles.map(v => v.powertrain))];
-    const vehicleTypes = [...new Set(selectedVehicles.map(v => v.vehicleType))];
-    
-    setActiveFilters({
-      powertrains,
-      vehicleTypes
-    });
-
-    // Move to next stage or stay
-    if (filteredVehicles.length <= 3) {
-      setCurrentStageKey('focus');
+    if (vehicleTypeFilter !== 'all') {
+      ranked = ranked.filter(item => item.vehicle.vehicleType === vehicleTypeFilter);
+    }
+    if (powertrainFilter !== 'all') {
+      ranked = ranked.filter(item => item.vehicle.powertrain === powertrainFilter);
+    }
+    const q = query.trim().toLowerCase();
+    if (q) {
+      ranked = ranked.filter(item => {
+        const v = item.vehicle;
+        return (
+          v.name.toLowerCase().includes(q) ||
+          v.trim.toLowerCase().includes(q) ||
+          v.bodyStyle.toLowerCase().includes(q) ||
+          v.thesis.toLowerCase().includes(q)
+        );
+      });
     }
 
-    // Add a message to the chat
-    setPendingPrompt({
-      id: `msg-${Date.now()}`,
-      text: `${selectedVehicles[0]?.name} is a strong match for your ${profile.lifeStage.replace(/-/g, ' ')} profile focused on ${option.label.toLowerCase()}.`
+    const sorted = [...ranked].sort((a, b) => {
+      switch (sortBy) {
+        case 'price-low':
+          return a.vehicle.priceEntryMilVnd - b.vehicle.priceEntryMilVnd;
+        case 'price-high':
+          return b.vehicle.priceEntryMilVnd - a.vehicle.priceEntryMilVnd;
+        case 'name-az':
+          return a.vehicle.name.localeCompare(b.vehicle.name);
+        case 'best-match':
+        default:
+          return b.score - a.score;
+      }
     });
-  };
 
-  const handleReset = () => {
-    resetProfile();
-    setCurrentStageKey('focus');
-    setActiveFilters(null);
-    setPendingPrompt({
-      id: `reset-${Date.now()}`,
-      text: "Let's restart from the full recommendation slate."
-    });
-  };
+    return sorted.slice(0, 9);
+  }, [baseFiltered, profile, selections, powertrainFilter, query, sortBy, vehicleTypeFilter, language]);
+
+  useEffect(() => {
+    if (isHydrated) trackEvent('shortlist_viewed');
+  }, [isHydrated]);
 
   if (!isHydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#f4efe7_0%,#ebf0f4_48%,#d6dee6_100%)]">
-        <div className="flex items-center gap-3 rounded-full border border-white/70 bg-white/80 px-5 py-3 text-sm text-brandSecondary-900 shadow-lg">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-brandSecondary-300 border-t-brandHighlight-500"></div>
-          <span>Preparing your recommendation studio...</span>
-        </div>
+      <div className="surface p-6 text-sm text-slate-600">
+        {t({ vi: 'Đang chuẩn bị danh sách đề xuất...', en: 'Preparing recommendations...' })}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(135deg,#f3eee6_0%,#edf2f6_42%,#d8e1ea_100%)] text-brandSecondary-900">
-      {/* Header */}
-      <header className="mx-auto mb-4 flex max-w-[1600px] items-center justify-between rounded-[28px] border border-white/70 bg-white/72 px-5 py-5 shadow-lg backdrop-blur md:px-6">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-brandSecondary-400">
-            Recommendation Studio
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight md:text-[2rem]">
-            Start broad, then narrow with confidence.
-          </h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="rounded-full border border-brandSecondary-100 bg-brandSecondary-50 px-4 py-2 text-sm text-brandSecondary-600">
-            {filteredVehicles.length} options live
-          </div>
-          <button
-            onClick={handleReset}
-            className="inline-flex items-center gap-2 rounded-full border border-brandSecondary-150 bg-white px-5 py-2.5 text-sm font-medium text-brandSecondary-700 transition-colors hover:bg-brandSecondary-50"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Reset
-          </button>
-          <Link
-            to="/"
-            className="rounded-full border border-brandSecondary-150 bg-white px-5 py-2.5 text-sm font-medium text-brandSecondary-700 transition-colors hover:bg-brandSecondary-50"
-          >
-            Edit Profile
-          </Link>
-        </div>
-      </header>
+    <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+      <aside className="surface h-fit p-4 sm:p-5 xl:sticky xl:top-24">
+        <p className="kicker">{t({ vi: 'Tập trung đề xuất', en: 'Shortlist focus' })}</p>
+        <h2 className="mt-2 text-lg font-semibold text-slate-900">
+          {t({ vi: 'Giữ danh sách đề xuất gọn và đúng nhu cầu', en: 'Keep your shortlist focused' })}
+        </h2>
+        <p className="mt-1 text-sm text-slate-600">{currentStage.prompt}</p>
 
-      {/* Main Content */}
-      <div className="mx-auto grid max-w-[1600px] gap-4 px-4 pb-5 md:px-6 lg:px-8 xl:grid-cols-[460px_minmax(0,1fr)]">
-        {/* Sidebar Chat */}
-        <aside className="self-start xl:sticky xl:top-4">
-          <div 
-            ref={chatEndRef}
-            className="flex flex-col gap-4 rounded-[24px] p-5 shadow-xl"
-            style={{ backgroundColor: 'rgba(255, 255, 255, 0.72)' }}
-          >
-            {/* Persona Summary */}
-            <div className="rounded-2xl bg-brandSecondary-50/50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brandSecondary-400">
-                Your Profile
+        <div className="mt-4 space-y-2">
+          {currentStage.options.map(option => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => {
+                if (activeFocusId === option.id) {
+                  setActiveFocusId(null);
+                  setSelections([]);
+                  setActiveFilters(null);
+                  return;
+                }
+                const picks = vehicles.filter(v => option.nextRecommendationIds.includes(v.id));
+                setSelections(prev => [...prev, { stageTitle: currentStage.title, label: option.label }]);
+                setActiveFilters({
+                  vehicleTypes: [...new Set(picks.map(v => v.vehicleType))],
+                  powertrains: [...new Set(picks.map(v => v.powertrain))],
+                });
+                setActiveFocusId(option.id);
+              }}
+              className={clsx(
+                'w-full rounded-xl border px-3 py-3 text-left transition',
+                activeFocusId === option.id
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-200 bg-white hover:bg-slate-50',
+              )}
+            >
+              <p className={clsx('text-sm font-semibold', activeFocusId === option.id ? 'text-white' : 'text-slate-900')}>
+                {option.label}
               </p>
-              <p className="mt-2 text-sm leading-relaxed text-brandSecondary-700">
-                {profile.lifeStage.replace(/-/g, ' ')}, {profile.drivingMix.replace(/-/g, ' ')}, 
-                and a focus on {profile.financeIntent.replace(/-/g, ' ')}.
+              <p className={clsx('mt-1 text-xs', activeFocusId === option.id ? 'text-slate-200' : 'text-slate-500')}>
+                {option.hint}
               </p>
-            </div>
+            </button>
+          ))}
+        </div>
 
-            {/* Current Stage Prompt */}
-            {currentStage && !isComparisonMode && (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brandSecondary-400">
-                    {currentStage.title}
-                  </p>
-                  <p className="mt-2 text-sm font-medium text-brandSecondary-800">
-                    {currentStage.prompt}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  {currentStage.options.map(option => (
-                    <button
-                      key={option.id}
-                      onClick={() => handleOptionSelect(option.id)}
-                      className="w-full rounded-xl border border-brandSecondary-100 bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:border-brandHighlight-300 hover:shadow-md"
-                    >
-                      <p className="text-sm font-semibold text-brandSecondary-800">{option.label}</p>
-                      <p className="mt-1 text-xs text-brandSecondary-500">{option.hint}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+        <button
+          onClick={() => {
+            setSelections([]);
+            setActiveFilters(null);
+            setActiveFocusId(null);
+            setQuery('');
+            setSortBy('best-match');
+            setVehicleTypeFilter('all');
+            setPowertrainFilter('all');
+          }}
+          className="btn-secondary mt-4 w-full"
+        >
+          {t({ vi: 'Đặt lại bộ lọc', en: 'Reset filters' })}
+        </button>
+      </aside>
 
-            {/* Messages */}
-            {selections.length > 0 && (
-              <div className="space-y-3">
-                {selections.map((selection, idx) => (
-                  <div key={idx} className="rounded-xl bg-brandHighlight-50 p-3">
-                    <p className="text-xs text-brandSecondary-600">
-                      ✓ Selected: <span className="font-medium">{selection.label}</span>
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {pendingPrompt && (
-              <div className="rounded-xl bg-brandSecondary-800 p-4 text-white">
-                <p className="text-sm leading-relaxed">{pendingPrompt.text}</p>
-              </div>
-            )}
-
-            {/* Quick Actions */}
-            {!isComparisonMode && (
-              <div className="rounded-xl border border-dashed border-brandSecondary-200 p-4 text-center">
-                <p className="text-xs text-brandSecondary-500">
-                  Select an option above to narrow your recommendations
-                </p>
-              </div>
-            )}
-
-            {isComparisonMode && (
-              <div className="rounded-xl bg-emerald-50 p-4 text-center">
-                <p className="text-sm font-medium text-emerald-700">
-                  ✓ Ready to compare! Review your shortlist below.
-                </p>
-              </div>
-            )}
+      <main className="surface p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="kicker">{t({ vi: 'Phòng đề xuất', en: 'Recommendation studio' })}</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
+              {t({ vi: 'Các lựa chọn phù hợp nhất với hồ sơ của bạn', en: 'Top matches for your profile' })}
+            </h1>
           </div>
-        </aside>
-
-        {/* Vehicle Grid */}
-        <main className="min-w-0 rounded-[32px] border border-white/70 bg-white/76 p-4 shadow-xl backdrop-blur md:p-5">
-          <div className="mb-4 border-b border-brandSecondary-100 pb-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-brandSecondary-400">
-              {isComparisonMode ? 'Final Shortlist' : 'Live Recommendation Slate'}
-            </p>
-            <h2 className="mt-2 text-[1.9rem] font-semibold leading-tight tracking-tight md:text-[2.4rem]">
-              {isComparisonMode 
-                ? 'Choose from your final shortlist' 
-                : 'Keep the chat in focus while the shortlist narrows.'}
-            </h2>
+          <div className="flex gap-2">
+            <span className="surface-muted px-3 py-2 text-sm font-semibold text-slate-700">
+              {shortlist.length} {t({ vi: 'mẫu phù hợp', en: 'matches' })}
+            </span>
+            {count > 0 ? (
+              <Link to="/compare" className="btn-primary">
+                {t({ vi: 'So sánh', en: 'Compare' })} ({count})
+              </Link>
+            ) : null}
           </div>
+        </div>
 
-          {/* Vehicle Cards */}
-          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {filteredVehicles.map(vehicle => {
-              const matchScore = calculateMatchScore(vehicle, profile, selections);
-              
-              return (
-                <article
-                  key={vehicle.id}
-                  className="group overflow-hidden rounded-[28px] border border-brandSecondary-100 bg-gradient-to-b from-white to-brandSecondary-50 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
-                >
-                  {/* Header */}
-                  <div className="flex items-start justify-between px-5 pt-5">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-brandSecondary-400">
-                        {vehicle.bodyStyle}
-                      </p>
-                      <h3 className="mt-2 text-xl font-semibold tracking-tight text-brandSecondary-900">
-                        {vehicle.name}
-                      </h3>
-                      <p className="mt-1 text-sm text-brandSecondary-500">{vehicle.trim}</p>
-                    </div>
-                    <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-                      {matchScore}% match
-                    </div>
-                  </div>
+        <div className="mb-4 grid gap-2 md:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr]">
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {t({ vi: 'Tìm kiếm', en: 'Search' })}
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder={t({ vi: 'Tìm theo mẫu xe, phiên bản, kiểu dáng...', en: 'Search model, trim, body style...' })}
+              className="input-base min-h-[42px] normal-case"
+            />
+          </label>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {t({ vi: 'Sắp xếp', en: 'Sort by' })}
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as 'best-match' | 'price-low' | 'price-high' | 'name-az')}
+              className="input-base min-h-[42px] normal-case"
+            >
+              <option value="best-match">{t({ vi: 'Phù hợp nhất', en: 'Best match' })}</option>
+              <option value="price-low">{t({ vi: 'Giá: thấp đến cao', en: 'Price: low to high' })}</option>
+              <option value="price-high">{t({ vi: 'Giá: cao đến thấp', en: 'Price: high to low' })}</option>
+              <option value="name-az">{t({ vi: 'Tên: A đến Z', en: 'Name: A to Z' })}</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {t({ vi: 'Dòng xe', en: 'Vehicle type' })}
+            <select
+              value={vehicleTypeFilter}
+              onChange={e =>
+                setVehicleTypeFilter(e.target.value as 'all' | 'sedan' | 'suv' | 'crossover' | 'hatchback')
+              }
+              className="input-base min-h-[42px] normal-case"
+            >
+              <option value="all">{t({ vi: 'Tất cả', en: 'All types' })}</option>
+              <option value="sedan">{t({ vi: 'Sedan', en: 'Sedan' })}</option>
+              <option value="suv">{t({ vi: 'SUV', en: 'SUV' })}</option>
+              <option value="crossover">{t({ vi: 'Crossover', en: 'Crossover' })}</option>
+              <option value="hatchback">{t({ vi: 'Hatchback', en: 'Hatchback' })}</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {t({ vi: 'Hệ truyền động', en: 'Powertrain' })}
+            <select
+              value={powertrainFilter}
+              onChange={e => setPowertrainFilter(e.target.value as 'all' | 'ice' | 'hybrid' | 'phev' | 'ev')}
+              className="input-base min-h-[42px] normal-case"
+            >
+              <option value="all">{t({ vi: 'Tất cả', en: 'All powertrains' })}</option>
+              <option value="ice">ICE</option>
+              <option value="hybrid">{t({ vi: 'Hybrid', en: 'Hybrid' })}</option>
+              <option value="phev">PHEV</option>
+              <option value="ev">EV</option>
+            </select>
+          </label>
+        </div>
 
-                  {/* Image */}
-                  <div className="px-4 pt-4">
-                    <img
-                      src={getVehicleImage(vehicle.modelSlug)}
-                      alt={`${vehicle.name} official image`}
-                      className="aspect-[1.35/1] w-full rounded-[24px] object-cover"
-                    />
-                  </div>
-
-                  {/* Content */}
-                  <div className="px-5 pb-5 pt-4">
-                    {/* Tags */}
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full bg-brandHighlight-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-brandHighlight-700">
-                        {vehicle.priceBand}
-                      </span>
-                      {vehicle.strengths.slice(0, 2).map(strength => (
-                        <span
-                          key={strength}
-                          className="rounded-full border border-brandSecondary-100 bg-white px-3 py-1.5 text-xs text-brandSecondary-600"
-                        >
-                          {strength}
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Thesis */}
-                    <p className="mt-4 text-sm leading-relaxed text-brandSecondary-700">
-                      {vehicle.thesis}
-                    </p>
-
-                    {/* Comparison Criteria (Short) */}
-                    <div className="mt-4 rounded-[20px] border border-brandSecondary-100 bg-white/70 p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-brandSecondary-400">
-                        Key Highlights
-                      </p>
-                      <div className="mt-3 space-y-3">
-                        {comparisonCriteriaShort.map(criterion => (
-                          <div key={criterion.key} className="border-b border-brandSecondary-50 pb-3 last:border-b-0 last:pb-0">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-brandSecondary-400">
-                              {criterion.label}
-                            </p>
-                            <p className="mt-1 text-sm leading-relaxed text-brandSecondary-700">
-                              {vehicle.compare[criterion.key as keyof typeof vehicle.compare]}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Why It Stays */}
-                    <div className="mt-4 rounded-[20px] bg-brandSecondary-50 p-4">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-brandSecondary-800">
-                        <svg className="h-4 w-4 text-brandHighlight-500" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                        </svg>
-                        Why it's on the list
-                      </div>
-                      <p className="mt-2 text-sm leading-relaxed text-brandSecondary-600">
-                        {vehicle.thesis}
-                      </p>
-                    </div>
-
-                    {/* Action Button */}
-                    <Link
-                      to={`/specifications?model=${encodeURIComponent(vehicle.modelSlug)}`}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-brandHighlight-500 py-3 text-sm font-semibold text-white shadow-md transition-all hover:bg-brandHighlight-600 hover:shadow-lg"
-                    >
-                      View Specifications
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
-                  </div>
-                </article>
-              );
+        {shortlist.length === 0 ? (
+          <div className="surface-muted p-5 text-sm text-slate-600">
+            {t({
+              vi: 'Không có mẫu xe phù hợp với tổ hợp tìm kiếm/sắp xếp/lọc hiện tại. Hãy đặt lại bộ lọc để xem lại toàn bộ.',
+              en: 'No vehicles match your current search/sort/filter combination. Reset filters to reopen the full shortlist.',
             })}
           </div>
-        </main>
-      </div>
+        ) : null}
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {shortlist.map(item => {
+            const { vehicle, score, reasons, budgetPenalty } = item;
+            const inCompare = isInCompare(vehicle.id);
+            return (
+              <article key={vehicle.id} className={clsx('card-hover rounded-2xl border bg-white p-3', budgetPenalty ? 'border-amber-300' : 'border-slate-200')}>
+                <VehicleImage
+                  src={getVehicleImage(vehicle.modelSlug)}
+                  fallbackSources={getVehicleImageSources(vehicle.modelSlug).slice(1)}
+                  alt={vehicle.name}
+                  className="aspect-[1.35/1] w-full rounded-xl object-cover"
+                />
+                <div className="mt-3 flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{vehicle.name}</p>
+                    <p className="text-xs text-slate-500">{vehicle.trim}</p>
+                  </div>
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{score}%</span>
+                </div>
+                <p className="mt-2 text-xs text-slate-600">{vehicle.priceBand}</p>
+                <p className="mt-2 text-sm text-slate-700">{vehicle.thesis}</p>
+                <ul className="mt-2 space-y-1 text-xs text-slate-500">
+                  {reasons.map((r, i) => (
+                    <li key={i}>• {r}</li>
+                  ))}
+                </ul>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <Link
+                    to={`/vehicle/${vehicle.modelSlug}`}
+                    onClick={() => trackEvent('recommendation_clicked', { vehicleModelSlug: vehicle.modelSlug })}
+                    className="btn-primary px-3 py-2 text-center text-xs"
+                  >
+                    {t({ vi: 'Chi tiết', en: 'Details' })}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => toggleVehicle(vehicle.id)}
+                    className={clsx(
+                      'rounded-full border px-3 py-2 text-xs font-semibold',
+                      inCompare ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-700',
+                    )}
+                  >
+                    {inCompare ? t({ vi: 'Đang so sánh', en: 'In compare' }) : t({ vi: 'So sánh', en: 'Compare' })}
+                  </button>
+                  <Link to={`/quote?model=${vehicle.modelSlug}`} className="btn-secondary border-slate-900 px-3 py-2 text-center text-xs text-slate-900">
+                    {t({ vi: 'Báo giá', en: 'Quote' })}
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </main>
     </div>
   );
+}
+
+function clsx(...args: Array<string | false | undefined>) {
+  return args.filter(Boolean).join(' ');
 }

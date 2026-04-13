@@ -1,3 +1,8 @@
+export interface SpecSection {
+  title: string;
+  rows: { label: string; value: string }[];
+}
+
 export interface Vehicle {
   id: string;
   modelSlug: string;
@@ -9,6 +14,8 @@ export interface Vehicle {
   powertrain: 'ice' | 'hybrid' | 'phev' | 'ev';
   fuelType: 'petrol' | 'diesel' | 'hybrid' | 'electric';
   priceBand: string;
+  /** Entry list price in million VND (used for budget fit & finance estimates) */
+  priceEntryMilVnd: number;
   thesis: string;
   strengths: string[];
   matchTags: string[];
@@ -25,14 +32,43 @@ export interface Vehicle {
 }
 
 export interface UserProfile {
-  lifeStage: string;
-  primaryUseNeed: string;
-  drivingMix: string;
-  financeIntent: string;
+  lifeStage?: string;
+  primaryUseNeed?: string;
+  drivingMix?: string;
+  /** Shopping budget band from intake (Question 4) */
+  budgetBand?: string;
+  financeIntent?: string;
   vehicleTypes?: string[];
   sizes?: string[];
   powertrains?: string[];
   fuelTypes?: string[];
+}
+
+export interface PriorityWeights {
+  safety: number;
+  style: number;
+  practicality: number;
+  premium: number;
+  value: number;
+  comfort: number;
+}
+
+export interface LeadRecord {
+  id: string;
+  createdAt: string;
+  type: 'quote' | 'booking';
+  vehicleModelSlug?: string;
+  showroomId?: string;
+  contact: { name: string; email: string; phone: string };
+  notes?: string;
+  finance?: { downPct: number; termMonths: number; rateApr: number; monthlyEstimateVnd: number };
+  profileSnapshot?: Partial<UserProfile>;
+  commercialContext?: {
+    insurancePlan?: 'none' | 'basic' | 'premium';
+    policyApplied?: boolean;
+    documentChecklistAccepted?: boolean;
+    reservationIntent?: boolean;
+  };
 }
 
 export interface RecommendationStage {
@@ -56,4 +92,14 @@ export interface ComparisonCriterion {
 export interface SelectionHistory {
   stageTitle: string;
   label: string;
+}
+
+export interface MerchantDealGuardrails {
+  discountMinPct: number;
+  discountMaxPct: number;
+  aprMinPct: number;
+  aprMaxPct: number;
+  minDepositPct: number;
+  maxDepositPct: number;
+  allowedPerks: string[];
 }

@@ -1,0 +1,118 @@
+import { Link, NavLink, useLocation } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { clsx } from 'clsx';
+import { LayoutGrid, SlidersHorizontal, Receipt } from 'lucide-react';
+import { useCompare } from '../context/CompareContext';
+import { useLanguage } from '../context/LanguageContext';
+import GlobalChatWidget from './GlobalChatWidget';
+
+const linkBase =
+  'inline-flex items-center rounded-full px-3.5 py-2 text-sm font-medium transition';
+
+function navClass(active: boolean) {
+  return clsx(
+    linkBase,
+    active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+  );
+}
+
+function mobileClass(active: boolean) {
+  return clsx(
+    'flex min-h-[54px] flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-semibold',
+    active ? 'text-amber-600' : 'text-slate-500',
+  );
+}
+
+export default function AppShell({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const { count } = useCompare();
+  const { language, toggleLanguage, t } = useLanguage();
+
+  return (
+    <div className="flex min-h-[100dvh] flex-col bg-[#f6f7f9] text-slate-900">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-900"
+      >
+        {t({ vi: 'Bỏ qua đến nội dung', en: 'Skip to content' })}
+      </a>
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <Link to="/" className="min-w-0">
+            <p className="kicker truncate">CarMatch</p>
+            <p className="truncate text-sm font-bold sm:text-base">Find Your Best-Fit Car, Faster</p>
+          </Link>
+
+          <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
+            <NavLink to="/profile" className={({ isActive }) => navClass(isActive)}>
+              {t({ vi: 'Hồ sơ', en: 'Profile' })}
+            </NavLink>
+            <NavLink to="/cars" className={({ isActive }) => navClass(isActive)}>
+              {t({ vi: 'Tất cả xe', en: 'All cars' })}
+            </NavLink>
+            <NavLink to="/compare" className={({ isActive }) => navClass(isActive)}>
+              {t({ vi: 'So sánh', en: 'Compare' })} {count > 0 ? <span className="ml-1 text-xs">({count})</span> : null}
+            </NavLink>
+            <NavLink to="/showrooms" className={({ isActive }) => navClass(isActive)}>
+              {t({ vi: 'Showroom', en: 'Showrooms' })}
+            </NavLink>
+            <NavLink to="/quote" className={({ isActive }) => navClass(isActive)}>
+              {t({ vi: 'Báo giá', en: 'Quote' })}
+            </NavLink>
+          </nav>
+
+          <div className="hidden items-center gap-2 sm:flex">
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+              aria-label={t({ vi: 'Đổi ngôn ngữ', en: 'Toggle language' })}
+            >
+              {language === 'vi' ? 'VI' : 'EN'}
+            </button>
+            <Link
+              to="/recommendations"
+              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+              {t({ vi: 'Xem đề xuất', en: 'View matches' })}
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main
+        id="main-content"
+        className={clsx(
+          'mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-4 sm:px-6 sm:py-6',
+          location.pathname === '/'
+            ? 'pb-[calc(6.6rem+env(safe-area-inset-bottom))] md:pb-6'
+            : 'pb-[calc(5.8rem+env(safe-area-inset-bottom))] md:pb-6',
+        )}
+      >
+        {children}
+      </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <div className="mx-auto flex max-w-lg">
+          <NavLink to="/profile" className={({ isActive }) => mobileClass(isActive)}>
+            <SlidersHorizontal className="h-5 w-5" />
+            <span>{t({ vi: 'Hồ sơ', en: 'Profile' })}</span>
+          </NavLink>
+          <NavLink to="/recommendations" className={({ isActive }) => mobileClass(isActive)}>
+            <LayoutGrid className="h-5 w-5" />
+            <span>{t({ vi: 'Đề xuất', en: 'Matches' })}</span>
+          </NavLink>
+          <NavLink to="/cars" className={({ isActive }) => mobileClass(isActive)}>
+            <LayoutGrid className="h-5 w-5" />
+            <span>{t({ vi: 'Tất cả xe', en: 'All cars' })}</span>
+          </NavLink>
+          <NavLink to="/quote" className={({ isActive }) => mobileClass(isActive)}>
+            <Receipt className="h-5 w-5" />
+            <span>{t({ vi: 'Báo giá', en: 'Quote' })}</span>
+          </NavLink>
+        </div>
+      </nav>
+      <GlobalChatWidget />
+    </div>
+  );
+}

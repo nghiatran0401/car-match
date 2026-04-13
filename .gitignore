@@ -14,6 +14,7 @@ target/
 .env
 .env.local
 .env.*
+!.env.example
 
 # Python cache
 __pycache__/
@@ -69,4 +70,5 @@ bower_components/
 
 # TypeScript
 *.tsbuildinfo
+.firecrawl/
 ```

@@ -1,10 +1,13 @@
+import { useLanguage } from '../context/LanguageContext';
+
 export default function DashboardPage() {
+  const { t } = useLanguage();
   return (
     <div className="min-h-screen bg-[linear-gradient(135deg,#f4efe7_0%,#ebf0f4_48%,#d6dee6_100%)]">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <h1 className="text-3xl font-bold text-brandSecondary-900">Dashboard</h1>
+        <h1 className="text-3xl font-bold text-brandSecondary-900">{t({ vi: 'Bảng điều khiển', en: 'Dashboard' })}</h1>
         <p className="mt-4 text-lg text-brandSecondary-600">
-          Your saved vehicles, quotes, and preferences will appear here.
+          {t({ vi: 'Xe đã lưu, báo giá và tuỳ chọn của bạn sẽ hiển thị tại đây.', en: 'Your saved vehicles, quotes, and preferences will appear here.' })}
         </p>
         
         {/* Quick Stats */}
