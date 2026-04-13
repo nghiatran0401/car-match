@@ -39,9 +39,21 @@ export default function ShowroomsPage() {
   const { language, t } = useLanguage();
   const localizedShowrooms = getLocalizedShowrooms(language);
   const [selectedShowroomId, setSelectedShowroomId] = useState(localizedShowrooms[0]?.id ?? '');
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
     trackEvent('showroom_viewed');
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const updateViewport = (event?: MediaQueryListEvent) => {
+      setIsMobileViewport(event ? event.matches : mediaQuery.matches);
+    };
+    updateViewport();
+    mediaQuery.addEventListener('change', updateViewport);
+    return () => mediaQuery.removeEventListener('change', updateViewport);
   }, []);
 
   const selected = localizedShowrooms.find(s => s.id === selectedShowroomId) ?? localizedShowrooms[0] ?? null;
@@ -70,7 +82,7 @@ export default function ShowroomsPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-10">
-        <div className="space-y-3 lg:col-span-3">
+        <div className="order-2 space-y-3 lg:order-1 lg:col-span-3">
           {localizedShowrooms.map(s => (
             <button
               key={s.id}
@@ -89,12 +101,32 @@ export default function ShowroomsPage() {
           ))}
         </div>
 
-        <div className="surface overflow-hidden p-0 lg:col-span-7">
+        <div className="order-1 space-y-3 lg:order-2 lg:col-span-7">
+          {selected ? (
+            <div className="surface p-3 sm:p-4">
+              <p className="text-sm font-semibold text-slate-900">{selected.name}</p>
+              <p className="mt-1 text-xs text-slate-600">{selected.address}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <a href={`tel:${selected.phone.replace(/\s/g, '')}`} className="btn-primary">
+                  {t({ vi: 'Gọi showroom', en: 'Call showroom' })}
+                </a>
+                <a
+                  href={mapsDirectionsUrl(selected.lat, selected.lon)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-secondary"
+                >
+                  {t({ vi: 'Mở bản đồ', en: 'Open maps' })}
+                </a>
+              </div>
+            </div>
+          ) : null}
+          <div className="surface overflow-hidden p-0">
           <MapContainer
             center={selected ? [selected.lat, selected.lon] : DEFAULT_MAP_CENTER}
             zoom={selected ? 13 : 5}
-            scrollWheelZoom
-            className="h-[420px] w-full lg:h-[620px]"
+            scrollWheelZoom={!isMobileViewport}
+            className="h-[340px] w-full sm:h-[420px] lg:h-[620px]"
           >
             <MapViewportSync selectedShowroom={selected} />
             <TileLayer
@@ -139,6 +171,7 @@ export default function ShowroomsPage() {
               </Marker>
             ))}
           </MapContainer>
+          </div>
         </div>
       </section>
     </div>

@@ -102,9 +102,9 @@ export default function GlobalChatWidget() {
   };
 
   return (
-    <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-[70] md:bottom-4">
+    <div className="fixed bottom-[calc(6.6rem+env(safe-area-inset-bottom))] right-2 z-[70] sm:right-4 md:bottom-4">
       {open ? (
-        <section className="flex h-[65vh] max-h-[560px] w-[min(92vw,360px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <section className="flex h-[70vh] max-h-[560px] w-[min(95vw,380px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:h-[65vh] sm:w-[min(92vw,360px)]">
           <header className="flex items-center justify-between border-b border-slate-100 px-3 py-2.5">
             <div>
               <p className="text-sm font-semibold text-slate-900">{t({ vi: 'Chat AI', en: 'AI chat' })}</p>
@@ -161,7 +161,7 @@ export default function GlobalChatWidget() {
                 placeholder={t({ vi: 'Dat cau hoi...', en: 'Ask anything...' })}
                 className="input-base mt-0 min-h-[38px] text-sm"
               />
-              <button type="submit" disabled={!input.trim() || loading} className="btn-primary px-3 py-2 text-xs disabled:bg-slate-300">
+                <button type="submit" disabled={!input.trim() || loading} className="btn-primary shrink-0 px-3 py-2 text-xs disabled:bg-slate-300">
                 {t({ vi: 'Gui', en: 'Send' })}
               </button>
             </div>

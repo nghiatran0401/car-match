@@ -1,7 +1,7 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { clsx } from 'clsx';
-import { LayoutGrid, SlidersHorizontal, Receipt } from 'lucide-react';
+import { Car, LayoutGrid, SlidersHorizontal, Receipt } from 'lucide-react';
 import { useCompare } from '../context/CompareContext';
 import { useLanguage } from '../context/LanguageContext';
 import GlobalChatWidget from './GlobalChatWidget';
@@ -18,7 +18,7 @@ function navClass(active: boolean) {
 
 function mobileClass(active: boolean) {
   return clsx(
-    'flex min-h-[54px] flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-semibold',
+    'flex min-h-[58px] flex-1 flex-col items-center justify-center gap-0.5 px-1.5 text-[10px] font-semibold',
     active ? 'text-amber-600' : 'text-slate-500',
   );
 }
@@ -61,7 +61,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
           </nav>
 
-          <div className="hidden items-center gap-2 sm:flex">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={toggleLanguage}
@@ -72,7 +72,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </button>
             <Link
               to="/recommendations"
-              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              className="hidden rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white sm:inline-flex"
             >
               {t({ vi: 'Xem đề xuất', en: 'View matches' })}
             </Link>
@@ -85,8 +85,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
         className={clsx(
           'mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-4 sm:px-6 sm:py-6',
           location.pathname === '/'
-            ? 'pb-[calc(6.6rem+env(safe-area-inset-bottom))] md:pb-6'
-            : 'pb-[calc(5.8rem+env(safe-area-inset-bottom))] md:pb-6',
+            ? 'pb-[calc(7.2rem+env(safe-area-inset-bottom))] md:pb-6'
+            : 'pb-[calc(6.4rem+env(safe-area-inset-bottom))] md:pb-6',
         )}
       >
         {children}
@@ -103,7 +103,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <span>{t({ vi: 'Đề xuất', en: 'Matches' })}</span>
           </NavLink>
           <NavLink to="/cars" className={({ isActive }) => mobileClass(isActive)}>
-            <LayoutGrid className="h-5 w-5" />
+            <Car className="h-5 w-5" />
             <span>{t({ vi: 'Tất cả xe', en: 'All cars' })}</span>
           </NavLink>
           <NavLink to="/quote" className={({ isActive }) => mobileClass(isActive)}>
