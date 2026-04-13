@@ -1,0 +1,72 @@
+```
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+target/
+
+# Compressed archives
+*.tar.gz
+
+# Environment variables
+.env
+.env.local
+.env.*
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing and coverage
+.coverage
+coverage/
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+.nyc_output/
+coverage-final.json
+
+# Runtime specific
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Distribution / packaging
+.sass-cache/
+connect.lock
+coverage/
+lib-cov/
+*.lcov
+*.tar.*
+
+# Node.js
+node_modules/
+jspm_packages/
+
+# Bower dependency directory (make sure this matches .bowerrc settings)
+bower_components/
+
+# TypeScript
+*.tsbuildinfo
+```
