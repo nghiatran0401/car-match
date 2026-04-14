@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { vehicles } from '../data/vehicles';
 import { getVehicleGallery, getVehicleImageSources } from '../lib/vehicleMedia';
-import { buildSpecSections, type SpecContext } from '../lib/specSectionsForVehicle';
+import { buildSpecSections } from '../lib/specSectionsForVehicle';
 import { useCompare } from '../context/CompareContext';
 import { trackEvent } from '../lib/analytics';
 import { variantPriceMilVnd, variantsForVehicle } from '../lib/vehicleVariants';
@@ -19,7 +19,7 @@ import type { MerchantDealGuardrails } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { localizeVehicle } from '../lib/localizedVehicle';
 import VehicleImage from '../components/VehicleImage';
-import InteractiveSpecItem from '../components/InteractiveSpecItem';
+import InteractiveSpecItem, { type SpecContext } from '../components/InteractiveSpecItem';
 
 interface ChatMessage {
   id: string;
@@ -100,6 +100,18 @@ export default function VehicleDetailPage() {
             `Give me a negotiation plan for ${vehicle.name} in my budget.`,
             `What are the biggest pros and trade-offs of ${vehicle.name} for my profile?`,
           ],
+    [language, vehicle.name],
+  );
+
+  const handleSpecClick = useCallback(
+    (ctx: SpecContext) => {
+      const q =
+        language === 'vi'
+          ? `Hãy giải thích về "${ctx.label}: ${ctx.value}" trên ${vehicle.name}.`
+          : `Please explain "${ctx.label}: ${ctx.value}" on the ${vehicle.name}.`;
+      setChatInput(q);
+      document.getElementById('vehicle-ai-chat')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    },
     [language, vehicle.name],
   );
 
@@ -262,7 +274,7 @@ export default function VehicleDetailPage() {
             </div>
           </div>
 
-          <aside className="surface-muted flex h-[520px] min-h-[520px] flex-col overflow-hidden p-3 sm:p-4">
+          <aside id="vehicle-ai-chat" className="surface-muted flex h-[520px] min-h-[520px] flex-col overflow-hidden p-3 sm:p-4">
             <div className="mb-2">
               <p className="kicker">{t({ vi: 'AI đồng hành', en: 'AI copilot' })}</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
@@ -442,12 +454,24 @@ export default function VehicleDetailPage() {
             <div key={section.title} className="surface-muted p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{section.title}</h3>
               <dl className="mt-2 space-y-2">
-                {section.rows.map(row => (
-                  <div key={row.label} className="flex justify-between gap-3 text-sm">
-                    <dt className="text-slate-500">{row.label}</dt>
-                    <dd className="text-right font-semibold text-slate-900">{row.value}</dd>
-                  </div>
-                ))}
+                {section.rows.map(row =>
+                  row.isInteractive && row.specKey && row.category ? (
+                    <InteractiveSpecItem
+                      key={`${section.title}-${row.label}`}
+                      label={row.label}
+                      value={row.value}
+                      specKey={row.specKey}
+                      category={row.category}
+                      vehicleId={vehicle.id}
+                      onSpecClick={handleSpecClick}
+                    />
+                  ) : (
+                    <div key={row.label} className="flex justify-between gap-3 text-sm">
+                      <dt className="text-slate-500">{row.label}</dt>
+                      <dd className="text-right font-semibold text-slate-900">{row.value}</dd>
+                    </div>
+                  ),
+                )}
               </dl>
             </div>
           ))}
