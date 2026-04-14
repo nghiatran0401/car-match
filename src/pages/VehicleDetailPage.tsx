@@ -148,6 +148,14 @@ export default function VehicleDetailPage() {
     }
   };
 
+  const askAboutSpec = (sectionTitle: string, specLabel: string, specValue: string) => {
+    const question =
+      language === 'vi'
+        ? `Giải thích chi tiết mục "${specLabel}: ${specValue}" trong phần ${sectionTitle} của ${vehicle.name}, và điều này ảnh hưởng trải nghiệm sử dụng thực tế như thế nào?`
+        : `Explain "${specLabel}: ${specValue}" from the ${sectionTitle} specs of ${vehicle.name}, and how it affects real-world ownership experience.`;
+    void sendVehicleChat(question);
+  };
+
   return (
     <div className="space-y-5">
       <section className="surface p-4 sm:p-5">
@@ -436,18 +444,30 @@ export default function VehicleDetailPage() {
 
       <section id="specifications" className="surface scroll-mt-24 p-5 sm:p-6">
         <h2 className="text-lg font-semibold text-slate-900">{t({ vi: 'Thông số đầy đủ', en: 'Full specifications' })}</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          {t({
+            vi: 'Chạm vào từng dòng thông số để hỏi AI giải thích theo nhu cầu sử dụng của bạn.',
+            en: 'Tap any spec row to ask AI for a practical explanation.',
+          })}
+        </p>
         <div className="mt-4 grid gap-5 md:grid-cols-2">
           {sections.map(section => (
             <div key={section.title} className="surface-muted p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{section.title}</h3>
-              <dl className="mt-2 space-y-2">
+              <div className="mt-2 space-y-2">
                 {section.rows.map(row => (
-                  <div key={row.label} className="flex justify-between gap-3 text-sm">
-                    <dt className="text-slate-500">{row.label}</dt>
-                    <dd className="text-right font-semibold text-slate-900">{row.value}</dd>
+                  <div key={row.label}>
+                    <button
+                      type="button"
+                      onClick={() => askAboutSpec(section.title, row.label, row.value)}
+                      className="flex w-full items-start justify-between gap-3 rounded-xl px-2 py-2 text-left text-sm transition hover:bg-white/80"
+                    >
+                      <p className="text-slate-500">{row.label}</p>
+                      <p className="text-right font-semibold text-slate-900">{row.value}</p>
+                    </button>
                   </div>
                 ))}
-              </dl>
+              </div>
             </div>
           ))}
         </div>

@@ -29,12 +29,16 @@ const starterPrompts = {
   ],
 };
 
-export default function GlobalChatWidget() {
+interface GlobalChatWidgetProps {
+  mode?: 'floating' | 'dock';
+}
+
+export default function GlobalChatWidget({ mode = 'floating' }: GlobalChatWidgetProps) {
   const { language, t } = useLanguage();
   const location = useLocation();
   const { profile, selections } = useProfile();
   const { vehicleIds } = useCompare();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(mode === 'dock');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -70,6 +74,12 @@ export default function GlobalChatWidget() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, open]);
 
+  useEffect(() => {
+    if (mode === 'dock') {
+      setOpen(true);
+    }
+  }, [mode]);
+
   const send = async (text: string) => {
     if (!text.trim() || loading) return;
     const user: Message = { id: `u-${Date.now()}`, role: 'user', content: text.trim() };
@@ -101,18 +111,35 @@ export default function GlobalChatWidget() {
     }
   };
 
+  const isDock = mode === 'dock';
+
   return (
-    <div className="fixed bottom-[calc(6.6rem+env(safe-area-inset-bottom))] right-2 z-[70] sm:right-4 md:bottom-4">
+    <div
+      className={
+        isDock
+          ? 'sticky top-[5.2rem] hidden h-[calc(100dvh-6.5rem)] min-h-[580px] xl:block'
+          : 'fixed inset-x-2 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-[70] sm:inset-x-auto sm:right-4 md:bottom-4'
+      }
+    >
       {open ? (
-        <section className="flex h-[70vh] max-h-[560px] w-[min(95vw,380px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:h-[65vh] sm:w-[min(92vw,360px)]">
+        <section
+          className={
+            isDock
+              ? 'flex h-full w-[350px] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm'
+              : 'flex h-[78dvh] max-h-[620px] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:h-[70vh] sm:w-[min(92vw,400px)]'
+          }
+        >
           <header className="flex items-center justify-between border-b border-slate-100 px-3 py-2.5">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">{t({ vi: 'Chat AI', en: 'AI chat' })}</p>
-              {currentVehicle ? <p className="text-xs text-slate-500">{currentVehicle.name}</p> : null}
+              {currentVehicle ? <p className="truncate text-xs text-slate-500">{currentVehicle.name}</p> : null}
+              {isDock ? <p className="text-[11px] text-slate-400">{t({ vi: 'Đồng hành xuyên suốt', en: 'Always-on copilot' })}</p> : null}
             </div>
-            <button type="button" onClick={() => setOpen(false)} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
-              <X className="h-4 w-4" />
-            </button>
+            {!isDock ? (
+              <button type="button" onClick={() => setOpen(false)} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
           </header>
           <div className="flex-1 space-y-2 overflow-y-auto bg-slate-50 p-2.5">
             {messages.length === 0 ? (
@@ -123,7 +150,7 @@ export default function GlobalChatWidget() {
                     key={prompt}
                     type="button"
                     onClick={() => void send(prompt)}
-                    className="w-full rounded-xl border border-slate-200 bg-white p-2 text-left text-xs text-slate-700"
+                    className="w-full rounded-xl border border-slate-200 bg-white p-2 text-left text-xs text-slate-700 hover:bg-slate-100"
                   >
                     {prompt}
                   </button>
@@ -171,7 +198,7 @@ export default function GlobalChatWidget() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-lg hover:bg-slate-800"
+          className="ml-auto inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-lg hover:bg-slate-800"
         >
           <MessageCircle className="h-4 w-4" />
           {t({ vi: 'Chat AI', en: 'Chat AI' })}
@@ -180,4 +207,3 @@ export default function GlobalChatWidget() {
     </div>
   );
 }
-
