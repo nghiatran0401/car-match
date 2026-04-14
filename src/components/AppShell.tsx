@@ -80,17 +80,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main
-        id="main-content"
+      <div
         className={clsx(
-          'mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-4 sm:px-6 sm:py-6',
+          'mx-auto flex w-full max-w-[1450px] flex-1 gap-4 px-4 py-4 sm:px-6 sm:py-6 xl:items-start',
           location.pathname === '/'
             ? 'pb-[calc(7.2rem+env(safe-area-inset-bottom))] md:pb-6'
             : 'pb-[calc(6.4rem+env(safe-area-inset-bottom))] md:pb-6',
         )}
       >
-        {children}
-      </main>
+        <GlobalChatWidget mode="dock" />
+        <main id="main-content" className="min-w-0 flex-1">
+          {children}
+        </main>
+      </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-lg">
@@ -112,7 +114,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </NavLink>
         </div>
       </nav>
-      <GlobalChatWidget />
+      <div className="xl:hidden">
+        <GlobalChatWidget />
+      </div>
     </div>
   );
 }
