@@ -5,7 +5,6 @@ import { Car, LayoutGrid, SlidersHorizontal, Receipt } from 'lucide-react';
 import { useCompare } from '../context/CompareContext';
 import { useLanguage } from '../context/LanguageContext';
 import GlobalChatWidget from './GlobalChatWidget';
-import InlineSelectionAssistant from './InlineSelectionAssistant';
 
 const linkBase =
   'inline-flex items-center rounded-full px-3.5 py-2 text-sm font-medium transition';
@@ -118,7 +117,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="xl:hidden">
         <GlobalChatWidget />
       </div>
-      <InlineSelectionAssistant />
     </div>
   );
 }
