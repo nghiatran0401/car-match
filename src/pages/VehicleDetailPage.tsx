@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { vehicles } from '../data/vehicles';
 import { getVehicleGallery, getVehicleImageSources } from '../lib/vehicleMedia';
-import { buildSpecSections } from '../lib/specSectionsForVehicle';
+import { buildSpecSections, type SpecContext } from '../lib/specSectionsForVehicle';
 import { useCompare } from '../context/CompareContext';
 import { trackEvent } from '../lib/analytics';
 import { variantPriceMilVnd, variantsForVehicle } from '../lib/vehicleVariants';
@@ -19,6 +19,7 @@ import type { MerchantDealGuardrails } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { localizeVehicle } from '../lib/localizedVehicle';
 import VehicleImage from '../components/VehicleImage';
+import InteractiveSpecItem from '../components/InteractiveSpecItem';
 
 interface ChatMessage {
   id: string;
