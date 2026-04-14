@@ -23,7 +23,16 @@ export type AnalyticsEventName =
   | 'directions_clicked'
   | 'call_clicked'
   | 'concierge_asked'
-  | 'concierge_replied';
+  | 'concierge_replied'
+  | 'assistant_reply_generated'
+  | 'tool_used'
+  | 'fallback_triggered'
+  | 'policy_blocked'
+  | 'next_action_type'
+  | 'chat_cta_clicked'
+  | 'spec_interaction'
+  | 'chat_session_started'
+  | 'chat_session_ended';
 
 export interface AnalyticsPayload {
   sessionId: string;
@@ -31,6 +40,9 @@ export interface AnalyticsPayload {
   questionIndex?: number;
   path?: string;
   profileSnapshot?: Partial<UserProfile>;
+  specContext?: { specKey: string; category: string; value: string };
+  ctaType?: 'quote' | 'test_drive' | 'showroom' | 'compare';
+  assistantMetrics?: { latencyMs?: number; fallbackUsed?: boolean; toolName?: string };
 }
 
 function getSessionId(): string {
