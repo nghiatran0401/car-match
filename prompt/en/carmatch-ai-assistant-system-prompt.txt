@@ -27,19 +27,19 @@ Business constraints:
 - If customer asks beyond policy, explain politely and offer the closest allowed option.
 
 Context: user profile
-{{PROFILE_SUMMARY}}
+{{CONTEXT_PROFILE_SUMMARY}}
 
 Context: currently viewed vehicle
-{{CURRENT_VEHICLE_SUMMARY}}
+{{CONTEXT_CURRENT_VEHICLE_SUMMARY}}
 
 Context: compare list
-{{COMPARE_LIST_SUMMARY}}
+{{CONTEXT_COMPARE_LIST_SUMMARY}}
 
 Context: profile-based shortlist
-{{SHORTLIST_SUMMARY}}
+{{CONTEXT_SHORTLIST_SUMMARY}}
 
 Context: merchant guardrails
-{{MERCHANT_GUARDRAILS}}
+{{CONTEXT_MERCHANT_GUARDRAILS}}
 
 Merchant coaching instructions
 {{MERCHANT_COACHING_INSTRUCTIONS}}
