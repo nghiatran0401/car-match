@@ -2,6 +2,9 @@ import type { MerchantDealGuardrails, UserProfile, Vehicle } from '../types';
 import type { AppLanguage } from '../context/LanguageContext';
 import enSystemPromptTemplate from '../../prompt/en/carmatch-ai-assistant-system-prompt.txt?raw';
 import viSystemPromptTemplate from '../../prompt/vi/carmatch-ai-assistant-system-prompt.txt?raw';
+import { retrieveKnowledge } from '../data/knowledge';
+import { executeTool, type ToolName } from './ai/tools';
+import { trackAIEvent, generateConversationId } from './analytics';
 
 export interface AssistantMessage {
   role: 'user' | 'assistant';
@@ -16,6 +19,22 @@ export interface AssistantContext {
   shortlistVehicles?: Vehicle[];
   merchantGuardrails?: MerchantDealGuardrails;
   adminPromptInstructions?: string;
+  
+  // AI Optimization Plan Phase 2+ fields
+  conversationId?: string;
+  funnelStage?: 'intake' | 'shortlist' | 'compare' | 'detail' | 'quote' | 'booking' | 'showroom';
+  enableRAG?: boolean;
+  enableTools?: boolean;
+}
+
+export interface EnhancedAssistantResponse {
+  reply: string;
+  usedRAG: boolean;
+  usedTools: Array<{ name: ToolName; success: boolean }>;
+  knowledgeSources?: string[];
+  fallbackUsed: boolean;
+  latencyMs: number;
+  conversationId: string;
 }
 
 function isVietnamese(language?: AppLanguage): boolean {
@@ -251,4 +270,156 @@ export async function askQwenAssistant(messages: AssistantMessage[], context: As
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+/**
+ * Enhanced AI Assistant with RAG and Tools support (Optimization Plan Phases 2-3)
+ */
+export async function askEnhancedAssistant(
+  messages: AssistantMessage[],
+  context: AssistantContext
+): Promise<EnhancedAssistantResponse> {
+  const startTime = performance.now();
+  const conversationId = context.conversationId || generateConversationId();
+  
+  // Track conversation start
+  trackAIEvent('ai_conversation_start', conversationId, {
+    funnelStage: context.funnelStage,
+    modelUsed: import.meta.env.VITE_QWEN_MODEL || DEFAULT_MODEL,
+  });
+  
+  const usedTools: Array<{ name: ToolName; success: boolean }> = [];
+  const knowledgeSources: string[] = [];
+  let usedRAG = false;
+  let fallbackUsed = false;
+  
+  const latestUserMessage = messages[messages.length - 1]?.content || '';
+  
+  // Phase 2: RAG - Retrieve relevant knowledge
+  if (context.enableRAG !== false) {
+    const ragStartTime = performance.now();
+    const knowledgeResults = retrieveKnowledge(latestUserMessage, {
+      language: context.language === 'vi' ? 'vi' : 'en',
+    }, 3);
+    
+    if (knowledgeResults.length > 0) {
+      usedRAG = true;
+      knowledgeResults.forEach(doc => {
+        knowledgeSources.push(doc.metadata.category);
+        trackAIEvent('ai_knowledge_hit', conversationId, {
+          ragQuery: latestUserMessage.slice(0, 100),
+          ragDocumentIds: [doc.id],
+          knowledgeSource: doc.type,
+        });
+      });
+      
+      trackAIEvent('ai_rag_query', conversationId, {
+        ragQuery: latestUserMessage.slice(0, 100),
+        ragDocumentIds: knowledgeResults.map(d => d.id),
+      });
+    } else {
+      trackAIEvent('ai_knowledge_miss', conversationId, {
+        ragQuery: latestUserMessage.slice(0, 100),
+      });
+    }
+  }
+  
+  // Phase 3: Tool usage based on intent detection
+  if (context.enableTools !== false && context.merchantGuardrails) {
+    // Detect intent and call appropriate tools
+    const lowerMessage = latestUserMessage.toLowerCase();
+    
+    // Price/discount intent
+    if (lowerMessage.includes('price') || lowerMessage.includes('discount') || 
+        lowerMessage.includes('giảm') || lowerMessage.includes('giá')) {
+      if (context.currentVehicle) {
+        const toolResult = await executeTool('price_estimator', {
+          vehicleId: context.currentVehicle.id,
+          discountPct: context.merchantGuardrails.discountMaxPct,
+          includeOnRoad: true,
+        });
+        
+        usedTools.push({ name: 'price_estimator', success: toolResult.success });
+        trackAIEvent(toolResult.success ? 'ai_tool_result' : 'ai_tool_error', conversationId, {
+          toolName: 'price_estimator',
+          toolOutput: toolResult.data || undefined,
+          toolLatencyMs: toolResult.latencyMs,
+        });
+      }
+    }
+    
+    // Finance intent
+    if (lowerMessage.includes('finance') || lowerMessage.includes('loan') || 
+        lowerMessage.includes('monthly') || lowerMessage.includes('trả góp')) {
+      if (context.currentVehicle) {
+        const toolResult = await executeTool('finance_estimator', {
+          vehiclePrice: context.currentVehicle.priceEntryMilVnd * 1000000,
+          downPaymentPct: 20,
+          loanTermMonths: 48,
+          aprPct: context.merchantGuardrails.aprMinPct,
+        });
+        
+        usedTools.push({ name: 'finance_estimator', success: toolResult.success });
+        trackAIEvent(toolResult.success ? 'ai_tool_result' : 'ai_tool_error', conversationId, {
+          toolName: 'finance_estimator',
+          toolOutput: toolResult.data || undefined,
+          toolLatencyMs: toolResult.latencyMs,
+        });
+      }
+    }
+    
+    // Showroom/appointment intent
+    if (lowerMessage.includes('showroom') || lowerMessage.includes('visit') || 
+        lowerMessage.includes('appointment') || lowerMessage.includes('xem xe')) {
+      const toolResult = await executeTool('showroom_lookup', {
+        city: context.language === 'vi' ? 'Hà Nội' : 'Hanoi',
+      });
+      
+      usedTools.push({ name: 'showroom_lookup', success: toolResult.success });
+      trackAIEvent(toolResult.success ? 'ai_tool_result' : 'ai_tool_error', conversationId, {
+        toolName: 'showroom_lookup',
+        toolOutput: toolResult.data || undefined,
+        toolLatencyMs: toolResult.latencyMs,
+      });
+    }
+  }
+  
+  // Build enhanced system prompt with RAG context
+  let enhancedContext = { ...context };
+  if (usedRAG && knowledgeSources.length > 0) {
+    // In production, would inject retrieved knowledge into prompt
+    enhancedContext.adminPromptInstructions = `${context.adminPromptInstructions || ''}\n\nRetrieved knowledge from: ${knowledgeSources.join(', ')}`;
+  }
+  
+  // Call the base assistant
+  let reply: string;
+  try {
+    reply = await askQwenAssistant(messages, enhancedContext);
+  } catch (error) {
+    fallbackUsed = true;
+    reply = buildLocalFallbackAnswer(messages, context);
+    trackAIEvent('ai_fallback_to_human', conversationId, {
+      guardrailType: 'error',
+      violationDetails: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+  
+  const latencyMs = performance.now() - startTime;
+  
+  // Track completion
+  trackAIEvent('ai_message_received', conversationId, {
+    funnelStage: context.funnelStage,
+    latencyMs,
+    modelUsed: import.meta.env.VITE_QWEN_MODEL || DEFAULT_MODEL,
+  });
+  
+  return {
+    reply,
+    usedRAG,
+    usedTools,
+    knowledgeSources: usedRAG ? knowledgeSources : undefined,
+    fallbackUsed,
+    latencyMs,
+    conversationId,
+  };
 }
