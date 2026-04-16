@@ -90,8 +90,8 @@ export default function RecommendationsPage() {
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-      <aside className="surface h-fit p-4 sm:p-5 xl:sticky xl:top-24">
+    <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <aside className="surface h-fit border-none bg-[#f5f7fa] p-4 shadow-none sm:p-5 xl:sticky xl:top-24">
         <p className="kicker">{t({ vi: 'Tập trung đề xuất', en: 'Shortlist focus' })}</p>
         <h2 className="mt-2 text-lg font-semibold text-slate-900">
           {t({ vi: 'Giữ danh sách đề xuất gọn và đúng nhu cầu', en: 'Keep your shortlist focused' })}
@@ -119,10 +119,10 @@ export default function RecommendationsPage() {
                 setActiveFocusId(option.id);
               }}
               className={clsx(
-                'w-full rounded-xl border px-3 py-3 text-left transition',
+                'w-full rounded-xl border px-3 py-3 text-left transition shadow-sm',
                 activeFocusId === option.id
                   ? 'border-slate-900 bg-slate-900 text-white'
-                  : 'border-slate-200 bg-white hover:bg-slate-50',
+                  : 'border-slate-200 bg-white hover:bg-slate-50 hover:shadow',
               )}
             >
               <p className={clsx('text-sm font-semibold', activeFocusId === option.id ? 'text-white' : 'text-slate-900')}>
@@ -151,7 +151,7 @@ export default function RecommendationsPage() {
         </button>
       </aside>
 
-      <main className="surface p-4 sm:p-5">
+      <main className="surface border-none bg-white p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="kicker">{t({ vi: 'Phòng đề xuất', en: 'Recommendation studio' })}</p>
@@ -240,7 +240,13 @@ export default function RecommendationsPage() {
             const { vehicle, score, reasons, budgetPenalty } = item;
             const inCompare = isInCompare(vehicle.id);
             return (
-              <article key={vehicle.id} className={clsx('defer-render card-hover rounded-2xl border bg-white p-3', budgetPenalty ? 'border-amber-300' : 'border-slate-200')}>
+              <article
+                key={vehicle.id}
+                className={clsx(
+                  'defer-render card-hover rounded-2xl border bg-[#fbfcfe] p-3 shadow-sm',
+                  budgetPenalty ? 'border-amber-300' : 'border-slate-200',
+                )}
+              >
                 <VehicleImage
                   src={getVehicleImage(vehicle.modelSlug)}
                   fallbackSources={getVehicleImageSources(vehicle.modelSlug).slice(1)}

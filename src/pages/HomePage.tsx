@@ -94,9 +94,9 @@ export default function HomePage() {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
-      <section className="surface p-5 sm:p-6">
-        <p className="kicker">CarMatch</p>
+    <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
+      <section className="surface border-none bg-[#f5f7fa] p-5 shadow-none sm:p-6">
+        <p className="kicker">Smart Showroom</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
           {t({ vi: 'Showroom thông minh được cá nhân hóa cho bạn.', en: 'A smart dealership crafted for you.' })}
         </h1>
@@ -115,7 +115,7 @@ export default function HomePage() {
                 <h2 className="mt-1 text-xl font-semibold text-slate-900">{step.title}</h2>
                 <p className="mt-1 text-sm text-slate-500">{step.helper}</p>
               </div>
-              <div className="surface-muted px-3 py-2 text-sm font-semibold text-slate-700">
+              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
                 {answeredCount}/5 {t({ vi: 'đã trả lời', en: 'answered' })}
               </div>
             </div>
@@ -135,10 +135,10 @@ export default function HomePage() {
                     type="button"
                     onClick={() => updateProfile(option.profilePatch)}
                     className={clsx(
-                      'min-h-[64px] rounded-2xl border px-4 py-3 text-left transition',
+                      'min-h-[64px] rounded-2xl border px-4 py-3 text-left transition shadow-sm',
                       active
                         ? 'border-slate-900 bg-slate-900 text-white'
-                        : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300',
+                        : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:shadow',
                     )}
                   >
                     <p className="text-sm font-semibold">{option.title}</p>
@@ -150,7 +150,7 @@ export default function HomePage() {
               })}
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-4">
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -206,7 +206,7 @@ export default function HomePage() {
         )}
       </section>
 
-      <aside className="surface overflow-hidden bg-brandSecondary-900 text-white">
+      <aside className="surface overflow-hidden rounded-[20px] border-none bg-[#101b2d] text-white shadow-lg">
         <div className="p-5 sm:p-6">
           <p className="text-[11px] uppercase tracking-[0.24em] text-brandSecondary-200">CarMatch featured pick</p>
           <h3 className="mt-2 text-2xl font-semibold">Volvo EC40</h3>

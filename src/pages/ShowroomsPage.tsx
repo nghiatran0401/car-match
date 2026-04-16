@@ -68,7 +68,7 @@ export default function ShowroomsPage() {
 
   return (
     <div className="space-y-5">
-      <section className="surface p-5 sm:p-6">
+      <section className="surface border-none bg-[#f5f7fa] p-5 shadow-none sm:p-6">
         <p className="kicker">{t({ vi: 'Showroom', en: 'Showrooms' })}</p>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
           {t({ vi: 'Ghé showroom trực tiếp', en: 'Visit us in person' })}
@@ -90,8 +90,8 @@ export default function ShowroomsPage() {
               onClick={() => focusShowroom(s.id)}
               className={
                 selectedShowroomId === s.id
-                  ? 'surface w-full border-slate-900 p-4 text-left'
-                  : 'surface card-hover w-full p-4 text-left'
+                  ? 'surface w-full border-slate-900 bg-white p-4 text-left'
+                  : 'surface card-hover w-full bg-white p-4 text-left'
               }
             >
               <p className="text-sm font-semibold text-slate-900">{s.name}</p>

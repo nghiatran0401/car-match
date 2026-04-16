@@ -29,21 +29,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const { language, toggleLanguage, t } = useLanguage();
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-[#f6f7f9] text-slate-900">
+    <div className="flex min-h-[100dvh] flex-col bg-[#eff2f6] text-slate-900">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-900"
       >
         {t({ vi: 'Bỏ qua đến nội dung', en: 'Skip to content' })}
       </a>
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-[#f8fafc]/95 backdrop-blur">
+        <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <Link to="/" className="min-w-0">
-            <p className="kicker truncate">CarMatch</p>
-            <p className="truncate text-sm font-bold sm:text-base">Find Your Best-Fit Car, Faster</p>
+            <p className="kicker truncate">Smart Showroom</p>
+            <p className="truncate text-sm font-bold sm:text-base">CarMatch concierge flow</p>
           </Link>
 
-          <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
+          <nav className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white p-1 md:flex" aria-label="Primary">
             <NavLink to="/profile" className={({ isActive }) => navClass(isActive)}>
               {t({ vi: 'Hồ sơ', en: 'Profile' })}
             </NavLink>
@@ -70,10 +70,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             >
               {language === 'vi' ? 'VI' : 'EN'}
             </button>
-            <Link
-              to="/recommendations"
-              className="hidden rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white sm:inline-flex"
-            >
+            <Link to="/recommendations" className="hidden btn-primary sm:inline-flex">
               {t({ vi: 'Xem đề xuất', en: 'View matches' })}
             </Link>
           </div>
@@ -82,7 +79,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <div
         className={clsx(
-          'mx-auto flex w-full max-w-[1450px] flex-1 gap-4 px-4 py-4 sm:px-6 sm:py-6 xl:items-start',
+          'mx-auto flex w-full max-w-[1280px] flex-1 gap-4 px-4 py-4 sm:px-6 sm:py-6 xl:items-start',
           location.pathname === '/'
             ? 'pb-[calc(7.2rem+env(safe-area-inset-bottom))] md:pb-6'
             : 'pb-[calc(6.4rem+env(safe-area-inset-bottom))] md:pb-6',

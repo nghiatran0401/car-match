@@ -143,7 +143,7 @@ export default function QuotePage() {
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <form onSubmit={submit} className="order-2 surface p-4 sm:p-5 xl:order-1">
+      <form onSubmit={submit} className="order-2 surface border-none bg-white p-4 sm:p-5 xl:order-1">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="kicker">{t({ vi: 'Showroom', en: 'Showroom' })}</p>
@@ -356,7 +356,7 @@ export default function QuotePage() {
         </section>
       </form>
 
-      <aside className="order-1 surface h-fit p-4 sm:p-5 xl:order-2 xl:sticky xl:top-24">
+      <aside className="order-1 surface h-fit border-none bg-[#f5f7fa] p-4 shadow-none sm:p-5 xl:order-2 xl:sticky xl:top-24">
         <p className="text-sm text-slate-500">{t({ vi: 'Giá hiện tại / ước tính', en: 'Current estimate' })}</p>
         <h2 className="mt-1 text-xl font-bold text-slate-900">{vehicle?.name ?? t({ vi: 'Chưa chọn xe', en: 'No vehicle selected' })}</h2>
         <p className="text-sm text-slate-600">{vehicle?.trim ?? '-'}</p>
