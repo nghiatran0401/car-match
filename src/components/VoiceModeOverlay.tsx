@@ -88,6 +88,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
   const messagesRef = useRef<TimelineMessage[]>([INITIAL_MESSAGE]);
   const assistantDraftIdRef = useRef<string | null>(null);
   const assistantTranscriptRef = useRef('');
+  const lastRealtimeErrorRef = useRef<string | null>(null);
   const historyListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -170,6 +171,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
   async function startVoiceSession() {
     if (sessionActiveRef.current) return;
     setError(null);
+    lastRealtimeErrorRef.current = null;
     setPhaseAndStatus('requesting', 'Waiting for microphone permission...');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -249,6 +251,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
     socketRef.current = socket;
     socket.addEventListener('open', () => {
       setError(null);
+      lastRealtimeErrorRef.current = null;
       sendRealtimeEvent({ type: 'session.configure', voice, languageHint });
     });
     socket.addEventListener('message', message => {
@@ -267,8 +270,9 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
       responseActiveRef.current = false;
       if (!sessionActiveRef.current) return;
       void endVoiceSession({ preserveMessages: true, quiet: true });
-      setError('Realtime session ended.');
-      setPhaseAndStatus('idle', 'Realtime session ended.');
+      const detail = lastRealtimeErrorRef.current ?? 'Realtime session ended.';
+      setError(detail);
+      setPhaseAndStatus('idle', detail);
     });
   }
 
@@ -353,6 +357,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
           typeof (event.error as { message?: unknown }).message === 'string'
             ? String((event.error as { message?: unknown }).message)
             : 'Realtime request failed.';
+        lastRealtimeErrorRef.current = detail;
         setError(detail);
         if (sessionActiveRef.current) setPhaseAndStatus('listening', 'The mic is still on. Try again.');
         return;

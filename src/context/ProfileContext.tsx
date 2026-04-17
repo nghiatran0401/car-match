@@ -46,8 +46,10 @@ const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 const defaultProfile: UserProfile = {};
 
 const defaultOnboarding: OnboardingState = {
-  stepIndex: 0,
-  answeredFlags: [false, false, false, false, false],
+  // Default to completed so first load lands on the featured recommendation card.
+  // Users can still edit answers via "Sửa câu trả lời" to re-open the questionnaire.
+  stepIndex: 5,
+  answeredFlags: [true, true, true, true, true],
 };
 
 function loadBundle(): ProfileBundle {
@@ -58,13 +60,9 @@ function loadBundle(): ProfileBundle {
       if (parsed && typeof parsed === 'object' && parsed.profile) {
         return {
           profile: { ...defaultProfile, ...parsed.profile },
-          onboarding: {
-            stepIndex: Math.min(
-              5,
-              Math.max(0, Number(parsed.onboarding?.stepIndex) || 0),
-            ),
-            answeredFlags: normalizeFlags(parsed.onboarding?.answeredFlags),
-          },
+          // Keep local/prod visual flow consistent by always starting from
+          // the featured recommendation state.
+          onboarding: defaultOnboarding,
         };
       }
     } catch (e) {
@@ -83,19 +81,6 @@ function loadBundle(): ProfileBundle {
   }
 
   return { profile: defaultProfile, onboarding: defaultOnboarding };
-}
-
-function normalizeFlags(flags: unknown): [boolean, boolean, boolean, boolean, boolean] {
-  if (!Array.isArray(flags) || flags.length < 5) {
-    return [false, false, false, false, false];
-  }
-  return [
-    Boolean(flags[0]),
-    Boolean(flags[1]),
-    Boolean(flags[2]),
-    Boolean(flags[3]),
-    Boolean(flags[4]),
-  ];
 }
 
 function saveBundle(profile: UserProfile, onboarding: OnboardingState) {
