@@ -35,6 +35,10 @@ export type AnalyticsEventName =
   | 'spec_interaction'
   | 'chat_session_started'
   | 'chat_session_ended'
+  | 'assistant_action_detected'
+  | 'assistant_action_executed'
+  | 'assistant_action_rejected'
+  | 'assistant_action_failed'
   
   // AI Agent Events (Phase 0 - Optimization Plan)
   | 'ai_conversation_start'

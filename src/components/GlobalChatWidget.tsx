@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Mic } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { askQwenAssistant, extractProfileUpdates, type AssistantMessage } from '../lib/aiAssistant';
@@ -13,6 +13,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { localizeVehicle } from '../lib/localizedVehicle';
 import type { UserProfile } from '../types';
 import VoiceModeOverlay from './VoiceModeOverlay';
+import { detectAssistantActions, executeAssistantAction, type AssistantAction } from '../lib/assistantActions';
 
 interface Message {
   id: string;
@@ -30,17 +31,24 @@ const starterPrompts = {
     'Which one is best for family use and lower ownership cost?',
   ],
 };
+const VOICE_PANEL_OPEN_KEY = 'carmatch-voice-panel-open';
 
 export default function GlobalChatWidget() {
   const { language, t } = useLanguage();
   const location = useLocation();
+  const navigate = useNavigate();
   const { profile, selections, updateProfile, aiRecommendationControls, setAIRecommendationControls } = useProfile();
-  const { vehicleIds } = useCompare();
+  const { vehicleIds, toggleVehicle, isInCompare } = useCompare();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(VOICE_PANEL_OPEN_KEY) === '1';
+  });
+  const [pendingAction, setPendingAction] = useState<AssistantAction | null>(null);
+  const lastVoiceUserTranscriptRef = useRef('');
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const currentVehicle = useMemo(() => {
@@ -72,6 +80,11 @@ export default function GlobalChatWidget() {
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(VOICE_PANEL_OPEN_KEY, voiceOpen ? '1' : '0');
+  }, [voiceOpen]);
 
   function normalizePlain(inputText: string) {
     return inputText
@@ -109,7 +122,7 @@ export default function GlobalChatWidget() {
   }
 
   function labelVehicleType(value: 'all' | 'sedan' | 'suv' | 'crossover' | 'hatchback') {
-    if (value === 'all') return t({ vi: 'Tat ca dong xe', en: 'All vehicle types' });
+    if (value === 'all') return t({ vi: 'Tất cả dòng xe', en: 'All vehicle types' });
     const map = {
       sedan: 'Sedan',
       suv: 'SUV',
@@ -120,7 +133,7 @@ export default function GlobalChatWidget() {
   }
 
   function labelPowertrain(value: 'all' | 'ice' | 'hybrid' | 'phev' | 'ev') {
-    if (value === 'all') return t({ vi: 'Tat ca he truyen dong', en: 'All powertrains' });
+    if (value === 'all') return t({ vi: 'Tất cả hệ truyền động', en: 'All powertrains' });
     const map = {
       ice: 'ICE',
       hybrid: 'Hybrid',
@@ -132,10 +145,10 @@ export default function GlobalChatWidget() {
 
   function labelSortBy(value: 'best-match' | 'price-low' | 'price-high' | 'name-az') {
     const map = {
-      'best-match': t({ vi: 'Phu hop nhat', en: 'Best match' }),
-      'price-low': t({ vi: 'Gia tang dan', en: 'Price low-high' }),
-      'price-high': t({ vi: 'Gia giam dan', en: 'Price high-low' }),
-      'name-az': t({ vi: 'Ten A-Z', en: 'Name A-Z' }),
+      'best-match': t({ vi: 'Phù hợp nhất', en: 'Best match' }),
+      'price-low': t({ vi: 'Giá tăng dần', en: 'Price low-high' }),
+      'price-high': t({ vi: 'Giá giảm dần', en: 'Price high-low' }),
+      'name-az': t({ vi: 'Tên A-Z', en: 'Name A-Z' }),
     } as const;
     return map[value];
   }
@@ -152,7 +165,7 @@ export default function GlobalChatWidget() {
         return '> 1.9 ty';
       case 'flexible':
       default:
-        return t({ vi: 'Linh hoat', en: 'Flexible' });
+        return t({ vi: 'Linh hoạt', en: 'Flexible' });
     }
   }
 
@@ -312,12 +325,70 @@ export default function GlobalChatWidget() {
         adminPromptInstructions: loadAdminConfig().promptInstructions,
       });
       setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: reply }]);
+      const actions = detectAssistantActions({
+        userText: text,
+        assistantText: reply,
+        vehicles,
+      });
+      actions.forEach(action => applyActionWithGuards(action));
       trackEvent('concierge_replied', { vehicleModelSlug: currentVehicle?.modelSlug });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t({ vi: 'Yeu cau that bai.', en: 'Request failed.' }));
+      setError(err instanceof Error ? err.message : t({ vi: 'Yêu cầu thất bại.', en: 'Request failed.' }));
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVoiceUserTranscript = (transcript: string) => {
+    const text = transcript.trim();
+    if (!text) return;
+    lastVoiceUserTranscriptRef.current = text;
+    setMessages(prev => [...prev, { id: `vu-${Date.now()}`, role: 'user', content: text }]);
+  };
+
+  const handleVoiceAssistantTranscript = (transcript: string) => {
+    const text = transcript.trim();
+    if (!text) return;
+    setMessages(prev => [...prev, { id: `va-${Date.now()}`, role: 'assistant', content: text }]);
+    const actions = detectAssistantActions({
+      userText: lastVoiceUserTranscriptRef.current,
+      assistantText: text,
+      vehicles,
+    });
+    actions.forEach(action => applyActionWithGuards(action));
+  };
+
+  const applyActionWithGuards = (action: AssistantAction) => {
+    if (action.kind === 'navigate' && (action.target === '/quote' || action.target === '/booking')) {
+      setPendingAction(action);
+      trackEvent('assistant_action_detected', { intent: `confirmation_required:${action.target}` });
+      return;
+    }
+    executeAssistantAction(action, {
+      navigate,
+      updateProfile,
+      setAIRecommendationControls,
+      toggleCompare: toggleVehicle,
+      isInCompare,
+    });
+  };
+
+  const confirmPendingAction = () => {
+    if (!pendingAction) return;
+    executeAssistantAction(pendingAction, {
+      navigate,
+      updateProfile,
+      setAIRecommendationControls,
+      toggleCompare: toggleVehicle,
+      isInCompare,
+    });
+    setPendingAction(null);
+  };
+
+  const rejectPendingAction = () => {
+    if (!pendingAction) return;
+    trackEvent('assistant_action_rejected', { intent: pendingAction.kind });
+    setPendingAction(null);
   };
 
   return (
@@ -325,33 +396,33 @@ export default function GlobalChatWidget() {
       <header className="flex items-center justify-between border-b border-slate-100 px-3 py-2.5">
         <div>
           <p className="text-sm font-semibold text-slate-900">{t({ vi: 'AI Co-pilot', en: 'AI Co-pilot' })}</p>
-          <p className="text-xs text-slate-500">{t({ vi: 'Tu onboarding den dat lich showroom', en: 'From onboarding to showroom booking' })}</p>
+          <p className="text-xs text-slate-500">{t({ vi: 'Từ bước làm hồ sơ đến đặt lịch showroom', en: 'From onboarding to showroom booking' })}</p>
           {currentVehicle ? <p className="mt-1 text-xs text-slate-500">{currentVehicle.name}</p> : null}
         </div>
       </header>
       {aiRecommendationControls?.source === 'ai-copilot' ? (
         <div className="border-b border-slate-100 bg-cyan-50/70 px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            {t({ vi: 'AI da ap dung', en: 'AI applied' })}
+            {t({ vi: 'AI đã áp dụng', en: 'AI applied' })}
           </p>
           <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-slate-700">
             <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
-              {t({ vi: 'Dong xe', en: 'Type' })}: {labelVehicleType(aiRecommendationControls.vehicleTypeFilter ?? 'all')}
+              {t({ vi: 'Dòng xe', en: 'Type' })}: {labelVehicleType(aiRecommendationControls.vehicleTypeFilter ?? 'all')}
             </span>
             <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
-              {t({ vi: 'Truyen dong', en: 'Powertrain' })}: {labelPowertrain(aiRecommendationControls.powertrainFilter ?? 'all')}
+              {t({ vi: 'Truyền động', en: 'Powertrain' })}: {labelPowertrain(aiRecommendationControls.powertrainFilter ?? 'all')}
             </span>
             <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
-              {t({ vi: 'Sap xep', en: 'Sort' })}: {labelSortBy(aiRecommendationControls.sortBy ?? 'best-match')}
+              {t({ vi: 'Sắp xếp', en: 'Sort' })}: {labelSortBy(aiRecommendationControls.sortBy ?? 'best-match')}
             </span>
             {aiRecommendationControls.budgetBand ? (
               <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
-                {t({ vi: 'Ngan sach', en: 'Budget' })}: {labelBudgetBand(aiRecommendationControls.budgetBand)}
+                {t({ vi: 'Ngân sách', en: 'Budget' })}: {labelBudgetBand(aiRecommendationControls.budgetBand)}
               </span>
             ) : null}
             {aiRecommendationControls.query ? (
               <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
-                {t({ vi: 'Tu khoa', en: 'Query' })}: {aiRecommendationControls.query}
+                {t({ vi: 'Từ khóa', en: 'Query' })}: {aiRecommendationControls.query}
               </span>
             ) : null}
           </div>
@@ -403,8 +474,34 @@ export default function GlobalChatWidget() {
             </div>
           ))
         )}
-        {loading ? <p className="text-xs text-slate-500">{t({ vi: 'Dang tra loi...', en: 'Thinking...' })}</p> : null}
+        {loading ? <p className="text-xs text-slate-500">{t({ vi: 'Đang trả lời...', en: 'Thinking...' })}</p> : null}
         {error ? <p className="text-xs text-amber-700">{error}</p> : null}
+        {pendingAction?.kind === 'navigate' ? (
+          <div className="mr-8 rounded-2xl border border-cyan-200 bg-cyan-50 px-3 py-2.5 text-xs text-cyan-900">
+            <p className="font-semibold">{t({ vi: 'Xác nhận điều hướng', en: 'Confirm navigation' })}</p>
+            <p className="mt-1">
+              {pendingAction.target === '/quote'
+                ? t({ vi: 'Đi tới trang báo giá ngay?', en: 'Go to quote page now?' })
+                : t({ vi: 'Đi tới trang đặt lịch ngay?', en: 'Go to booking page now?' })}
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={confirmPendingAction}
+                className="rounded-full bg-cyan-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-cyan-700"
+              >
+                {t({ vi: 'Đồng ý', en: 'Confirm' })}
+              </button>
+              <button
+                type="button"
+                onClick={rejectPendingAction}
+                className="rounded-full border border-cyan-300 bg-white px-3 py-1 text-[11px] font-semibold text-cyan-700 hover:bg-cyan-100"
+              >
+                {t({ vi: 'Hủy', en: 'Cancel' })}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
       <form
         onSubmit={e => {
@@ -417,7 +514,7 @@ export default function GlobalChatWidget() {
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={t({ vi: 'Dat cau hoi...', en: 'Ask anything...' })}
+            placeholder={t({ vi: 'Đặt câu hỏi...', en: 'Ask anything...' })}
             className="input-base mt-0 min-h-[40px] rounded-full text-sm"
             maxLength={350}
           />
@@ -425,19 +522,25 @@ export default function GlobalChatWidget() {
             type="button"
             onClick={() => setVoiceOpen(true)}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            aria-label={t({ vi: 'Mo voice mode', en: 'Open voice mode' })}
+            aria-label={t({ vi: 'Mở chế độ giọng nói', en: 'Open voice mode' })}
           >
             <Mic className="h-4 w-4" />
           </button>
           <button type="submit" disabled={!input.trim() || loading} className="btn-primary shrink-0 px-3 py-2 text-xs disabled:bg-slate-300">
-            {t({ vi: 'Gui', en: 'Send' })}
+            {t({ vi: 'Gửi', en: 'Send' })}
           </button>
         </div>
         <p className="mt-1 text-[11px] text-slate-400">
           {input.length}/350 {t({ vi: 'ký tự', en: 'chars' })}
         </p>
       </form>
-      <VoiceModeOverlay open={voiceOpen} onClose={() => setVoiceOpen(false)} />
+      <VoiceModeOverlay
+        open={voiceOpen}
+        onOpen={() => setVoiceOpen(true)}
+        onClose={() => setVoiceOpen(false)}
+        onUserTranscript={handleVoiceUserTranscript}
+        onAssistantTranscript={handleVoiceAssistantTranscript}
+      />
     </section>
   );
 }

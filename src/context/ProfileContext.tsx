@@ -51,6 +51,10 @@ const defaultOnboarding: OnboardingState = {
   stepIndex: 5,
   answeredFlags: [true, true, true, true, true],
 };
+const emptyOnboarding: OnboardingState = {
+  stepIndex: 0,
+  answeredFlags: [false, false, false, false, false],
+};
 
 function loadBundle(): ProfileBundle {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -133,7 +137,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       budgetBand: undefined,
       powertrains: undefined,
     }));
-    setOnboarding(defaultOnboarding);
+    setOnboarding(emptyOnboarding);
   }, []);
 
   const answeredCount = onboarding.answeredFlags.filter(Boolean).length;

@@ -1,5 +1,6 @@
 import { startTransition, useEffect, useRef, useState, type CSSProperties } from 'react';
 import './VoiceModeOverlay.css';
+import { useLanguage } from '../context/LanguageContext';
 
 type Role = 'assistant' | 'user';
 type SessionPhase = 'idle' | 'requesting' | 'listening' | 'capturing' | 'processing' | 'speaking';
@@ -34,17 +35,14 @@ type RealtimeEvent = {
 
 interface VoiceModeOverlayProps {
   open: boolean;
+  onOpen: () => void;
   onClose: () => void;
+  onUserTranscript?: (text: string) => void;
+  onAssistantTranscript?: (text: string) => void;
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 const EXPLICIT_REALTIME_WS_URL = import.meta.env.VITE_REALTIME_WS_URL ?? null;
-const LANGUAGE_OPTIONS = [
-  { value: 'auto', label: 'Auto detect' },
-  { value: 'vi', label: 'Vietnamese' },
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: 'Chinese' },
-];
 const VOICE_OPTIONS = [
   { value: 'Tina', label: 'Tina' },
   { value: 'Hana', label: 'Hana' },
@@ -53,20 +51,17 @@ const VOICE_OPTIONS = [
   { value: 'Raymond', label: 'Raymond' },
   { value: 'Ethan', label: 'Ethan' },
 ];
-const INITIAL_MESSAGE: TimelineMessage = {
-  id: crypto.randomUUID(),
-  role: 'assistant',
-  text: "Tap the mic to start realtime voice mode. Once connected, just speak naturally and pause when you're done.",
-};
 const INITIAL_METER = new Array(18).fill(0.08);
 const OUTPUT_SAMPLE_RATE = 24000;
+const VOICE_RESUME_KEY = 'carmatch-voice-resume-active';
 
-export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProps) {
-  const [messages, setMessages] = useState<TimelineMessage[]>([INITIAL_MESSAGE]);
+export default function VoiceModeOverlay({ open, onOpen, onClose, onUserTranscript, onAssistantTranscript }: VoiceModeOverlayProps) {
+  const { language, t } = useLanguage();
+  const [messages, setMessages] = useState<TimelineMessage[]>(() => [{ id: crypto.randomUUID(), role: 'assistant', text: '' }]);
   const [phase, setPhase] = useState<SessionPhase>('idle');
-  const [status, setStatus] = useState('Tap the mic to start voice mode.');
+  const [status, setStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [languageHint, setLanguageHint] = useState('auto');
+  const [languageHint, setLanguageHint] = useState<'vi' | 'en'>(() => (language === 'vi' ? 'vi' : 'en'));
   const [voice, setVoice] = useState('Tina');
   const [meterValues, setMeterValues] = useState<number[]>(INITIAL_METER);
   const [signalLevel, setSignalLevel] = useState(0.08);
@@ -85,21 +80,15 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
   const responseDoneRef = useRef(false);
   const assistantAudioActiveRef = useRef(false);
   const phaseRef = useRef<SessionPhase>('idle');
-  const messagesRef = useRef<TimelineMessage[]>([INITIAL_MESSAGE]);
+  const messagesRef = useRef<TimelineMessage[]>([{ id: crypto.randomUUID(), role: 'assistant', text: '' }]);
   const assistantDraftIdRef = useRef<string | null>(null);
   const assistantTranscriptRef = useRef('');
   const lastRealtimeErrorRef = useRef<string | null>(null);
-  const historyListRef = useRef<HTMLDivElement>(null);
+  const autoResumeAttemptedRef = useRef(false);
 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
-
-  useEffect(() => {
-    const historyList = historyListRef.current;
-    if (!historyList) return;
-    historyList.scrollTop = historyList.scrollHeight;
-  }, [messages, open]);
 
   useEffect(() => {
     return () => {
@@ -109,21 +98,54 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
 
   useEffect(() => {
     if (!open) {
-      void endVoiceSession({ preserveMessages: true, quiet: true });
       setShowSettings(false);
     }
   }, [open]);
 
   useEffect(() => {
+    const nextLanguageHint = language === 'vi' ? 'vi' : 'en';
+    setLanguageHint(nextLanguageHint);
+  }, [language]);
+
+  useEffect(() => {
+    if (phase === 'idle') {
+      setStatus(t({ vi: 'Chạm micro để bật chế độ giọng nói.', en: 'Tap the mic to start voice mode.' }));
+    }
+  }, [phase, t]);
+
+  useEffect(() => {
+    const localizedStarter = t({
+      vi: 'Chạm micro để bắt đầu chế độ giọng nói realtime. Khi đã kết nối, chỉ cần nói tự nhiên và dừng lại khi bạn nói xong.',
+      en: "Tap the mic to start realtime voice mode. Once connected, just speak naturally and pause when you're done.",
+    });
+    if (messagesRef.current.length === 1 && messagesRef.current[0]?.role === 'assistant') {
+      replaceMessages([{ id: messagesRef.current[0].id, role: 'assistant', text: localizedStarter }]);
+    }
+  }, [language, t]);
+
+  useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      void endVoiceSession({ preserveMessages: true, quiet: true });
       onClose();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(VOICE_RESUME_KEY, sessionActiveRef.current ? '1' : '0');
+  }, [phase]);
+
+  useEffect(() => {
+    if (!open || autoResumeAttemptedRef.current || sessionActiveRef.current) return;
+    if (typeof window === 'undefined') return;
+    const shouldResume = localStorage.getItem(VOICE_RESUME_KEY) === '1';
+    if (!shouldResume) return;
+    autoResumeAttemptedRef.current = true;
+    void startVoiceSession();
+  }, [open]);
 
   useEffect(() => {
     if (!sessionActiveRef.current || !realtimeReadyRef.current) return;
@@ -172,7 +194,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
     if (sessionActiveRef.current) return;
     setError(null);
     lastRealtimeErrorRef.current = null;
-    setPhaseAndStatus('requesting', 'Waiting for microphone permission...');
+      setPhaseAndStatus('requesting', t({ vi: 'Đang chờ quyền micro...', en: 'Waiting for microphone permission...' }));
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: false },
@@ -210,11 +232,14 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
       responseDoneRef.current = false;
       assistantAudioActiveRef.current = false;
       runMeterLoop();
-      setPhaseAndStatus('requesting', 'Connecting to the realtime voice model...');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(VOICE_RESUME_KEY, '1');
+      }
+      setPhaseAndStatus('requesting', t({ vi: 'Đang kết nối mô hình thoại realtime...', en: 'Connecting to the realtime voice model...' }));
       connectRealtimeSocket();
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to access the microphone.');
-      setPhaseAndStatus('idle', 'Microphone access failed.');
+      setError(caughtError instanceof Error ? caughtError.message : t({ vi: 'Không thể truy cập micro.', en: 'Unable to access the microphone.' }));
+      setPhaseAndStatus('idle', t({ vi: 'Không cấp được quyền micro.', en: 'Microphone access failed.' }));
       await cleanupMic();
     }
   }
@@ -237,12 +262,24 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
     setSignalLevel(0.08);
 
     if (!options?.preserveMessages) {
-      replaceMessages([{ id: crypto.randomUUID(), role: 'assistant', text: 'Session closed. Tap the mic whenever you want to talk again.' }]);
+      replaceMessages([
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          text: t({
+            vi: 'Đã đóng phiên. Chạm micro bất cứ lúc nào để trò chuyện lại.',
+            en: 'Session closed. Tap the mic whenever you want to talk again.',
+          }),
+        },
+      ]);
     }
     if (!options?.quiet) {
-      setPhaseAndStatus('idle', 'Voice mode is off.');
+      setPhaseAndStatus('idle', t({ vi: 'Đã tắt chế độ giọng nói.', en: 'Voice mode is off.' }));
     } else {
       phaseRef.current = 'idle';
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(VOICE_RESUME_KEY, '0');
     }
   }
 
@@ -258,19 +295,19 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
       try {
         handleRealtimeEvent(JSON.parse(String(message.data)) as RealtimeEvent);
       } catch (caughtError) {
-        setError(caughtError instanceof Error ? caughtError.message : 'Invalid realtime event.');
+        setError(caughtError instanceof Error ? caughtError.message : t({ vi: 'Sự kiện realtime không hợp lệ.', en: 'Invalid realtime event.' }));
       }
     });
     socket.addEventListener('error', () => {
-      setError('Realtime connection failed.');
-      if (sessionActiveRef.current) setPhaseAndStatus('idle', 'Realtime connection failed.');
+      setError(t({ vi: 'Kết nối realtime thất bại.', en: 'Realtime connection failed.' }));
+      if (sessionActiveRef.current) setPhaseAndStatus('idle', t({ vi: 'Kết nối realtime thất bại.', en: 'Realtime connection failed.' }));
     });
     socket.addEventListener('close', () => {
       realtimeReadyRef.current = false;
       responseActiveRef.current = false;
       if (!sessionActiveRef.current) return;
       void endVoiceSession({ preserveMessages: true, quiet: true });
-      const detail = lastRealtimeErrorRef.current ?? 'Realtime session ended.';
+      const detail = lastRealtimeErrorRef.current ?? t({ vi: 'Phiên realtime đã kết thúc.', en: 'Realtime session ended.' });
       setError(detail);
       setPhaseAndStatus('idle', detail);
     });
@@ -291,7 +328,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
       case 'session.updated': {
         realtimeReadyRef.current = true;
         if (sessionActiveRef.current && phaseRef.current !== 'capturing' && phaseRef.current !== 'speaking' && phaseRef.current !== 'processing') {
-          setPhaseAndStatus('listening', "I'm here and listening.");
+          setPhaseAndStatus('listening', t({ vi: 'Tôi đang lắng nghe.', en: "I'm here and listening." }));
         }
         return;
       }
@@ -302,16 +339,17 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
         }
         responseActiveRef.current = false;
         responseDoneRef.current = false;
-        setPhaseAndStatus('capturing', 'Listening...');
+        setPhaseAndStatus('capturing', t({ vi: 'Đang nghe...', en: 'Listening...' }));
         return;
       }
       case 'input_audio_buffer.speech_stopped':
-        setPhaseAndStatus('processing', 'Thinking...');
+        setPhaseAndStatus('processing', t({ vi: 'Đang suy nghĩ...', en: 'Thinking...' }));
         return;
       case 'conversation.item.input_audio_transcription.completed': {
         const transcript = typeof event.transcript === 'string' ? event.transcript.trim() : '';
         if (!transcript) return;
         appendMessage({ id: crypto.randomUUID(), role: 'user', text: transcript });
+        onUserTranscript?.(transcript);
         return;
       }
       case 'response.created':
@@ -319,7 +357,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
         responseDoneRef.current = false;
         assistantDraftIdRef.current = null;
         assistantTranscriptRef.current = '';
-        setPhaseAndStatus('processing', 'Thinking...');
+        setPhaseAndStatus('processing', t({ vi: 'Đang suy nghĩ...', en: 'Thinking...' }));
         return;
       case 'response.audio_transcript.delta': {
         const delta = typeof event.delta === 'string' ? event.delta : '';
@@ -331,13 +369,17 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
       case 'response.audio_transcript.done': {
         const transcript = typeof event.transcript === 'string' ? event.transcript : assistantTranscriptRef.current;
         upsertAssistantMessage(transcript, true);
+        const finalTranscript = transcript.trim();
+        if (finalTranscript) {
+          onAssistantTranscript?.(finalTranscript);
+        }
         return;
       }
       case 'response.audio.delta': {
         const delta = typeof event.delta === 'string' ? event.delta : '';
         if (!delta) return;
         void enqueueAssistantAudio(delta);
-        setPhaseAndStatus('speaking', 'Speaking. Cut in whenever you want.');
+        setPhaseAndStatus('speaking', t({ vi: 'Đang nói. Bạn có thể ngắt lời bất cứ lúc nào.', en: 'Speaking. Cut in whenever you want.' }));
         return;
       }
       case 'response.audio.done':
@@ -356,10 +398,12 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
           'message' in event.error &&
           typeof (event.error as { message?: unknown }).message === 'string'
             ? String((event.error as { message?: unknown }).message)
-            : 'Realtime request failed.';
+            : t({ vi: 'Yêu cầu realtime thất bại.', en: 'Realtime request failed.' });
         lastRealtimeErrorRef.current = detail;
         setError(detail);
-        if (sessionActiveRef.current) setPhaseAndStatus('listening', 'The mic is still on. Try again.');
+        if (sessionActiveRef.current) {
+          setPhaseAndStatus('listening', t({ vi: 'Micro vẫn đang bật. Thử lại nhé.', en: 'The mic is still on. Try again.' }));
+        }
         return;
       }
       default:
@@ -369,7 +413,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
 
   function maybeReturnToListening() {
     if (sessionActiveRef.current && responseDoneRef.current && !assistantAudioActiveRef.current && phaseRef.current !== 'capturing') {
-      setPhaseAndStatus('listening', "I'm here and listening.");
+      setPhaseAndStatus('listening', t({ vi: 'Tôi đang lắng nghe.', en: "I'm here and listening." }));
     }
   }
 
@@ -475,18 +519,12 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
   const sphereStyle = { '--voice-level': signalLevel.toFixed(3) } as CSSProperties;
 
   return (
-    <div
-      className="voice-overlay"
-      onClick={() => {
-        void endVoiceSession({ preserveMessages: true, quiet: true });
-        onClose();
-      }}
-    >
-      <main className="voice-shell" onClick={event => event.stopPropagation()}>
+    <div className="voice-overlay">
+      <main className="voice-shell">
         <section className="voice-chrome">
           <div className="voice-brand">
             <span className="voice-brand-mark">Pulse</span>
-            <span className="voice-brand-copy">Qwen realtime voice mode</span>
+            <span className="voice-brand-copy">{t({ vi: 'Chế độ giọng nói realtime Qwen', en: 'Qwen realtime voice mode' })}</span>
           </div>
 
           <div className="voice-top-actions">
@@ -494,10 +532,9 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
               <SettingsIcon />
             </button>
             <button
-              aria-label="Close voice mode"
+              aria-label={t({ vi: 'Đóng chế độ giọng nói', en: 'Close voice mode' })}
               className="voice-icon-button"
               onClick={() => {
-                void endVoiceSession({ preserveMessages: true, quiet: true });
                 onClose();
               }}
               type="button"
@@ -509,21 +546,20 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
           {showSettings ? (
             <section className="voice-settings-panel">
               <div className="voice-settings-header">
-                <strong>Session settings</strong>
-                <span>Realtime VAD sends after about one second of silence.</span>
+                <strong>{t({ vi: 'Cài đặt phiên', en: 'Session settings' })}</strong>
+                <span>
+                  {t({
+                    vi: 'VAD realtime sẽ gửi sau khoảng 1 giây im lặng.',
+                    en: 'Realtime VAD sends after about one second of silence.',
+                  })}
+                </span>
+              </div>
+              <div className="voice-setting">
+                <span>{t({ vi: 'Ngôn ngữ', en: 'Language' })}</span>
+                <div>{languageHint === 'vi' ? 'Vietnamese' : 'English'}</div>
               </div>
               <label className="voice-setting">
-                <span>Preferred language</span>
-                <select onChange={event => setLanguageHint(event.target.value)} value={languageHint}>
-                  {LANGUAGE_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="voice-setting">
-                <span>Realtime voice</span>
+                <span>{t({ vi: 'Giọng nói realtime', en: 'Realtime voice' })}</span>
                 <select onChange={event => setVoice(event.target.value)} value={voice}>
                   {VOICE_OPTIONS.map(option => (
                     <option key={option.value} value={option.value}>
@@ -537,23 +573,15 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
         </section>
 
         <section className="voice-stage">
-          <aside className="voice-history-panel">
-            <span className="voice-history-label">Recent turns</span>
-            <div ref={historyListRef} className="voice-history-list">
-              {messages.slice(-6).map(message => (
-                <article className={`voice-history-card ${message.role}`} key={message.id}>
-                  <div className="voice-history-role">{message.role === 'assistant' ? 'Assistant' : 'You'}</div>
-                  <p>{message.text}</p>
-                </article>
-              ))}
-            </div>
-          </aside>
-
           <div className="voice-center">
             <div className="voice-center-copy">
-              <span className="voice-center-label">{phase === 'idle' ? 'Hands-free realtime mode' : 'Live realtime session'}</span>
               <h1 className="voice-status">{status}</h1>
-              <p className="voice-subcopy">Speak naturally. The model listens continuously, hands over after about one second of silence, and stops talking when you cut in.</p>
+              <p className="voice-subcopy">
+                {t({
+                  vi: 'Nói tự nhiên. Mô hình sẽ lắng nghe liên tục, chuyển lượt sau khoảng 1 giây im lặng, và dừng nói khi bạn ngắt lời.',
+                  en: 'Speak naturally. The model listens continuously, hands over after about one second of silence, and stops talking when you cut in.',
+                })}
+              </p>
             </div>
             {error ? <div className="voice-error">{error}</div> : null}
             {phase === 'speaking' ? (
@@ -562,11 +590,13 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
                 onClick={() => {
                   stopAssistantAudio({ keepContext: true });
                   sendRealtimeEvent({ type: 'response.cancel' });
-                  if (sessionActiveRef.current) setPhaseAndStatus('listening', "Speech stopped. I'm still listening.");
+                  if (sessionActiveRef.current) {
+                    setPhaseAndStatus('listening', t({ vi: 'Đã dừng nói. Tôi vẫn đang lắng nghe.', en: "Speech stopped. I'm still listening." }));
+                  }
                 }}
                 type="button"
               >
-                Stop AI voice
+                {t({ vi: 'Dừng giọng nói AI', en: 'Stop AI voice' })}
               </button>
             ) : null}
             <div className={`voice-sphere-wrap ${phase}`} style={sphereStyle}>
