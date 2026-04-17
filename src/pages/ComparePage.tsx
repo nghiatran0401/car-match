@@ -165,7 +165,7 @@ export default function ComparePage() {
                     <tr className="border-b border-slate-100">
                       <th className="sticky left-0 z-10 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{row.label}</th>
                       {values.map((val, i) => (
-                        <td key={`${row.key}-${i}`} className={isDiff ? 'border-l border-slate-100 bg-amber-50 px-3 py-3 text-slate-800' : 'border-l border-slate-100 px-3 py-3 text-slate-800'}>{val}</td>
+                        <td key={`${row.key}-${i}`} className={isDiff ? 'border-l border-slate-100 bg-slate-100 px-3 py-3 text-slate-800' : 'border-l border-slate-100 px-3 py-3 text-slate-800'}>{val}</td>
                       ))}
                     </tr>
                   </Fragment>
