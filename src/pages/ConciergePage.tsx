@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { Mic } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { askQwenAssistant, type AssistantMessage } from '../lib/aiAssistant';
 import { vehicles } from '../data/vehicles';
@@ -10,6 +11,7 @@ import { loadMerchantGuardrails } from '../lib/merchantGuardrails';
 import { loadAdminConfig } from '../lib/adminConfig';
 import { useLanguage } from '../context/LanguageContext';
 import { localizeVehicle } from '../lib/localizedVehicle';
+import VoiceModeOverlay from '../components/VoiceModeOverlay';
 
 const prompts = [
   'Which model best suits a growing family in city traffic?',
@@ -38,6 +40,7 @@ export default function ConciergePage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const seededMessageRef = useRef<string | null>(null);
 
@@ -78,7 +81,7 @@ export default function ConciergePage() {
     void send(seededPrompt);
   }, [messages.length, searchParams]);
 
-  const send = async (text: string) => {
+  const send = async (text: string): Promise<void> => {
     if (!text.trim() || loading) return;
 
     const user: Message = {
@@ -239,12 +242,21 @@ export default function ConciergePage() {
               })}
               className="min-h-[44px] flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm text-slate-900 outline-none"
             />
+            <button
+              type="button"
+              onClick={() => setVoiceOpen(true)}
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              aria-label={t({ vi: 'Mo voice mode', en: 'Open voice mode' })}
+            >
+              <Mic className="h-4 w-4" />
+            </button>
             <button type="submit" disabled={!input.trim() || loading} className="btn-primary h-11 px-4 disabled:bg-slate-300">
               {t({ vi: 'Gửi', en: 'Send' })}
             </button>
           </div>
         </form>
       </div>
+      <VoiceModeOverlay open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </section>
   );
 }

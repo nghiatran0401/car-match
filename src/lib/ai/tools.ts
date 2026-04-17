@@ -478,7 +478,7 @@ export const toolRegistry: Record<ToolName, ToolDefinition> = {
       discountPct: 'number (optional, 0-7)',
       includeOnRoad: 'boolean (optional)',
     },
-    execute: (input) => priceEstimatorTool(input as PriceEstimateToolInput),
+    execute: (input) => priceEstimatorTool(input as unknown as PriceEstimateToolInput),
   },
   
   finance_estimator: {
@@ -490,7 +490,7 @@ export const toolRegistry: Record<ToolName, ToolDefinition> = {
       loanTermMonths: 'number (required)',
       aprPct: 'number (required)',
     },
-    execute: (input) => financeEstimatorTool(input as FinanceEstimateToolInput),
+    execute: (input) => financeEstimatorTool(input as unknown as FinanceEstimateToolInput),
   },
   
   showroom_lookup: {
@@ -511,7 +511,7 @@ export const toolRegistry: Record<ToolName, ToolDefinition> = {
       requestedValue: 'number|string (required)',
       guardrails: 'MerchantDealGuardrails (required)',
     },
-    execute: (input) => policyCheckTool(input as PolicyCheckToolInput),
+    execute: (input) => policyCheckTool(input as unknown as PolicyCheckToolInput),
   },
   
   appointment_booking: {
@@ -525,7 +525,7 @@ export const toolRegistry: Record<ToolName, ToolDefinition> = {
       customerName: 'string (optional)',
       customerPhone: 'string (optional)',
     },
-    execute: (input) => appointmentBookingTool(input as AppointmentBookingToolInput),
+    execute: (input) => appointmentBookingTool(input as unknown as AppointmentBookingToolInput),
   },
 };
 

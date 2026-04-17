@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { MessageCircle, X } from 'lucide-react';
+import { MessageCircle, Mic, X } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { askQwenAssistant, type AssistantMessage } from '../lib/aiAssistant';
 import { vehicles } from '../data/vehicles';
@@ -11,6 +11,7 @@ import { loadMerchantGuardrails } from '../lib/merchantGuardrails';
 import { loadAdminConfig } from '../lib/adminConfig';
 import { useLanguage } from '../context/LanguageContext';
 import { localizeVehicle } from '../lib/localizedVehicle';
+import VoiceModeOverlay from './VoiceModeOverlay';
 
 interface Message {
   id: string;
@@ -39,6 +40,7 @@ export default function GlobalChatWidget() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const currentVehicle = useMemo(() => {
@@ -70,7 +72,7 @@ export default function GlobalChatWidget() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, open]);
 
-  const send = async (text: string) => {
+  const send = async (text: string): Promise<void> => {
     if (!text.trim() || loading) return;
     const user: Message = { id: `u-${Date.now()}`, role: 'user', content: text.trim() };
     setMessages(prev => [...prev, user]);
@@ -161,6 +163,14 @@ export default function GlobalChatWidget() {
                 placeholder={t({ vi: 'Dat cau hoi...', en: 'Ask anything...' })}
                 className="input-base mt-0 min-h-[38px] text-sm"
               />
+                <button
+                  type="button"
+                  onClick={() => setVoiceOpen(true)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  aria-label={t({ vi: 'Mo voice mode', en: 'Open voice mode' })}
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
                 <button type="submit" disabled={!input.trim() || loading} className="btn-primary shrink-0 px-3 py-2 text-xs disabled:bg-slate-300">
                 {t({ vi: 'Gui', en: 'Send' })}
               </button>
@@ -177,6 +187,7 @@ export default function GlobalChatWidget() {
           {t({ vi: 'Chat AI', en: 'Chat AI' })}
         </button>
       )}
+      <VoiceModeOverlay open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   );
 }

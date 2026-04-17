@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, X, Send } from 'lucide-react';
+import { MessageCircle, X, Send, Mic } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { useCompare } from '../context/CompareContext';
 import { vehicles } from '../data/vehicles';
@@ -13,6 +13,7 @@ import { askQwenAssistant, extractProfileUpdates, type AssistantMessage, type Pr
 import { loadMerchantGuardrails } from '../lib/merchantGuardrails';
 import { loadAdminConfig } from '../lib/adminConfig';
 import VehicleImage from '../components/VehicleImage';
+import VoiceModeOverlay from '../components/VoiceModeOverlay';
 
 interface ChatMessage {
   id: string;
@@ -48,6 +49,7 @@ export default function RecommendationsPage() {
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState('');
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [profileUpdates, setProfileUpdates] = useState<ProfileUpdateSuggestion[]>([]);
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -146,7 +148,7 @@ export default function RecommendationsPage() {
     }
   }, [profileUpdates]);
 
-  const sendChatMessage = async (text: string) => {
+  const sendChatMessage = async (text: string): Promise<void> => {
     if (!text.trim() || chatLoading) return;
     const user: ChatMessage = { id: `u-${Date.now()}`, role: 'user', content: text.trim() };
     setMessages(prev => [...prev, user]);
@@ -292,6 +294,14 @@ export default function RecommendationsPage() {
                   placeholder={t({ vi: 'Đặt câu hỏi...', en: 'Ask anything...' })}
                   className="input-base mt-0 min-h-[40px] flex-1 text-sm"
                 />
+                <button
+                  type="button"
+                  onClick={() => setVoiceOpen(true)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  aria-label={t({ vi: 'Mo voice mode', en: 'Open voice mode' })}
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
                 <button
                   type="submit"
                   disabled={!chatInput.trim() || chatLoading}
@@ -469,6 +479,7 @@ export default function RecommendationsPage() {
           </Link>
         </div>
       ) : null}
+      <VoiceModeOverlay open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   );
 }

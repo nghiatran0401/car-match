@@ -129,6 +129,13 @@ interface ChatCompletionResponse {
   choices?: Array<{ message?: { content?: string } }>;
 }
 
+function asAnalyticsRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
 function trimConversation(messages: AssistantMessage[], maxMessages = 14): AssistantMessage[] {
   if (messages.length <= maxMessages) return messages;
   return messages.slice(messages.length - maxMessages);
@@ -414,7 +421,6 @@ export async function askEnhancedAssistant(
   
   // Phase 2: RAG - Retrieve relevant knowledge
   if (context.enableRAG !== false) {
-    const ragStartTime = performance.now();
     const knowledgeResults = retrieveKnowledge(latestUserMessage, {
       language: context.language === 'vi' ? 'vi' : 'en',
     }, 3);
@@ -459,7 +465,7 @@ export async function askEnhancedAssistant(
         usedTools.push({ name: 'price_estimator', success: toolResult.success });
         trackAIEvent(toolResult.success ? 'ai_tool_result' : 'ai_tool_error', conversationId, {
           toolName: 'price_estimator',
-          toolOutput: toolResult.data || undefined,
+          toolOutput: asAnalyticsRecord(toolResult.data),
           toolLatencyMs: toolResult.latencyMs,
         });
       }
@@ -479,7 +485,7 @@ export async function askEnhancedAssistant(
         usedTools.push({ name: 'finance_estimator', success: toolResult.success });
         trackAIEvent(toolResult.success ? 'ai_tool_result' : 'ai_tool_error', conversationId, {
           toolName: 'finance_estimator',
-          toolOutput: toolResult.data || undefined,
+          toolOutput: asAnalyticsRecord(toolResult.data),
           toolLatencyMs: toolResult.latencyMs,
         });
       }
@@ -495,7 +501,7 @@ export async function askEnhancedAssistant(
       usedTools.push({ name: 'showroom_lookup', success: toolResult.success });
       trackAIEvent(toolResult.success ? 'ai_tool_result' : 'ai_tool_error', conversationId, {
         toolName: 'showroom_lookup',
-        toolOutput: toolResult.data || undefined,
+        toolOutput: asAnalyticsRecord(toolResult.data),
         toolLatencyMs: toolResult.latencyMs,
       });
     }
@@ -516,8 +522,8 @@ export async function askEnhancedAssistant(
     fallbackUsed = true;
     reply = buildLocalFallbackAnswer(messages, context);
     trackAIEvent('ai_fallback_to_human', conversationId, {
-      guardrailType: 'error',
-      violationDetails: error instanceof Error ? error.message : 'Unknown error',
+      guardrailType: 'off_topic',
+      policyViolationDetails: error instanceof Error ? error.message : 'Unknown error',
     });
   }
   

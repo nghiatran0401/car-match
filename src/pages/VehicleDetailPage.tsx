@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { Mic } from 'lucide-react';
 import { vehicles } from '../data/vehicles';
 import { getVehicleGallery, getVehicleImageSources } from '../lib/vehicleMedia';
 import { buildSpecSections } from '../lib/specSectionsForVehicle';
@@ -20,6 +21,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { localizeVehicle } from '../lib/localizedVehicle';
 import VehicleImage from '../components/VehicleImage';
 import InteractiveSpecItem, { type SpecContext } from '../components/InteractiveSpecItem';
+import VoiceModeOverlay from '../components/VoiceModeOverlay';
 
 interface ChatMessage {
   id: string;
@@ -49,6 +51,7 @@ export default function VehicleDetailPage() {
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState('');
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [guardrailsOpen, setGuardrailsOpen] = useState(false);
   const [guardrails, setGuardrails] = useState<MerchantDealGuardrails>(defaultMerchantGuardrails);
 
@@ -439,6 +442,14 @@ export default function VehicleDetailPage() {
                 placeholder={t({ vi: `Hỏi về ${vehicle.name}...`, en: `Ask about ${vehicle.name}...` })}
                 className="input-base mt-0 min-h-[40px] text-sm"
               />
+              <button
+                type="button"
+                onClick={() => setVoiceOpen(true)}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                aria-label={t({ vi: 'Mo voice mode', en: 'Open voice mode' })}
+              >
+                <Mic className="h-4 w-4" />
+              </button>
               <button type="submit" disabled={!chatInput.trim() || chatLoading} className="btn-primary px-3 py-2 disabled:bg-slate-300">
                 {t({ vi: 'Gửi', en: 'Send' })}
               </button>
@@ -477,6 +488,7 @@ export default function VehicleDetailPage() {
           ))}
         </div>
       </section>
+      <VoiceModeOverlay open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   );
 }

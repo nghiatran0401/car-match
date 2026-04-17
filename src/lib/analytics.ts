@@ -84,6 +84,8 @@ export interface AnalyticsPayload {
   guardrailType?: 'profanity' | 'competitor_mention' | 'price_hallucination' | 'off_topic';
   policyViolationDetails?: string;
   modelUsed?: string;
+  latencyMs?: number;
+  toolLatencyMs?: number;
   tokenUsage?: {
     prompt: number;
     completion: number;
