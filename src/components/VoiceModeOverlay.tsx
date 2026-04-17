@@ -88,10 +88,17 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
   const messagesRef = useRef<TimelineMessage[]>([INITIAL_MESSAGE]);
   const assistantDraftIdRef = useRef<string | null>(null);
   const assistantTranscriptRef = useRef('');
+  const historyListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    const historyList = historyListRef.current;
+    if (!historyList) return;
+    historyList.scrollTop = historyList.scrollHeight;
+  }, [messages, open]);
 
   useEffect(() => {
     return () => {
@@ -105,6 +112,17 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
       setShowSettings(false);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      void endVoiceSession({ preserveMessages: true, quiet: true });
+      onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
 
   useEffect(() => {
     if (!sessionActiveRef.current || !realtimeReadyRef.current) return;
@@ -452,8 +470,14 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
   const sphereStyle = { '--voice-level': signalLevel.toFixed(3) } as CSSProperties;
 
   return (
-    <div className="voice-overlay">
-      <main className="voice-shell">
+    <div
+      className="voice-overlay"
+      onClick={() => {
+        void endVoiceSession({ preserveMessages: true, quiet: true });
+        onClose();
+      }}
+    >
+      <main className="voice-shell" onClick={event => event.stopPropagation()}>
         <section className="voice-chrome">
           <div className="voice-brand">
             <span className="voice-brand-mark">Pulse</span>
@@ -481,7 +505,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
             <section className="voice-settings-panel">
               <div className="voice-settings-header">
                 <strong>Session settings</strong>
-                <span>Realtime VAD sends after about 1 second of silence.</span>
+                <span>Realtime VAD sends after about one second of silence.</span>
               </div>
               <label className="voice-setting">
                 <span>Preferred language</span>
@@ -510,7 +534,7 @@ export default function VoiceModeOverlay({ open, onClose }: VoiceModeOverlayProp
         <section className="voice-stage">
           <aside className="voice-history-panel">
             <span className="voice-history-label">Recent turns</span>
-            <div className="voice-history-list">
+            <div ref={historyListRef} className="voice-history-list">
               {messages.slice(-6).map(message => (
                 <article className={`voice-history-card ${message.role}`} key={message.id}>
                   <div className="voice-history-role">{message.role === 'assistant' ? 'Assistant' : 'You'}</div>

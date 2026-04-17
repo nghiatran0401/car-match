@@ -9,6 +9,16 @@ export interface OnboardingState {
   answeredFlags: [boolean, boolean, boolean, boolean, boolean];
 }
 
+export interface AIRecommendationControls {
+  query?: string;
+  sortBy?: 'best-match' | 'price-low' | 'price-high' | 'name-az';
+  vehicleTypeFilter?: 'all' | 'sedan' | 'suv' | 'crossover' | 'hatchback';
+  powertrainFilter?: 'all' | 'ice' | 'hybrid' | 'phev' | 'ev';
+  budgetBand?: 'under-1000' | '1000-1400' | '1400-1900' | '1900-plus' | 'flexible';
+  source?: 'ai-copilot';
+  updatedAt: number;
+}
+
 interface ProfileBundle {
   profile: UserProfile;
   onboarding: OnboardingState;
@@ -25,6 +35,8 @@ interface ProfileContextType {
   selections: SelectionHistory[];
   activeFilters: Partial<UserProfile> | null;
   setActiveFilters: React.Dispatch<React.SetStateAction<Partial<UserProfile> | null>>;
+  aiRecommendationControls: AIRecommendationControls | null;
+  setAIRecommendationControls: React.Dispatch<React.SetStateAction<AIRecommendationControls | null>>;
   setOnboarding: React.Dispatch<React.SetStateAction<OnboardingState>>;
   clearWizardAnswers: () => void;
 }
@@ -97,6 +109,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [isHydrated, setIsHydrated] = useState(false);
   const [selections, setSelections] = useState<SelectionHistory[]>([]);
   const [activeFilters, setActiveFilters] = useState<Partial<UserProfile> | null>(null);
+  const [aiRecommendationControls, setAIRecommendationControls] = useState<AIRecommendationControls | null>(null);
 
   useEffect(() => {
     const bundle = loadBundle();
@@ -153,6 +166,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         setSelections,
         activeFilters,
         setActiveFilters,
+        aiRecommendationControls,
+        setAIRecommendationControls,
         setOnboarding,
         clearWizardAnswers,
       }}

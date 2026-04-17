@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { vehicles } from '../data/vehicles';
 import { getVehicleImage, getVehicleImageSources } from '../lib/vehicleMedia';
@@ -6,6 +6,7 @@ import VehicleImage from '../components/VehicleImage';
 import { useLanguage } from '../context/LanguageContext';
 import { localizeVehicle } from '../lib/localizedVehicle';
 import { useCompare } from '../context/CompareContext';
+import { useProfile } from '../context/ProfileContext';
 
 type SortBy = 'name-az' | 'price-low' | 'price-high';
 type VehicleTypeFilter = 'all' | 'sedan' | 'suv' | 'crossover' | 'hatchback';
@@ -14,10 +15,12 @@ type PowertrainFilter = 'all' | 'ice' | 'hybrid' | 'phev' | 'ev';
 export default function CarsPage() {
   const { language, t } = useLanguage();
   const { isInCompare, toggleVehicle, count } = useCompare();
+  const { aiRecommendationControls } = useProfile();
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('name-az');
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<VehicleTypeFilter>('all');
   const [powertrainFilter, setPowertrainFilter] = useState<PowertrainFilter>('all');
+  const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
 
   const allCars = useMemo(
     () =>
@@ -62,9 +65,37 @@ export default function CarsPage() {
     return list;
   }, [allCars, powertrainFilter, query, sortBy, vehicleTypeFilter]);
 
+  useEffect(() => {
+    if (!aiRecommendationControls || aiRecommendationControls.source !== 'ai-copilot') return;
+    if (filteredCars.length > 0) return;
+    if (!query.trim()) return;
+    setQuery('');
+  }, [aiRecommendationControls, filteredCars.length, query]);
+
+  useEffect(() => {
+    if (!aiRecommendationControls || aiRecommendationControls.source !== 'ai-copilot') return;
+    if (aiRecommendationControls.query !== undefined) setQuery(aiRecommendationControls.query);
+    if (aiRecommendationControls.sortBy !== undefined) {
+      const mappedSort: SortBy =
+        aiRecommendationControls.sortBy === 'best-match' ? 'name-az' : aiRecommendationControls.sortBy;
+      setSortBy(mappedSort);
+    }
+    if (aiRecommendationControls.vehicleTypeFilter !== undefined) setVehicleTypeFilter(aiRecommendationControls.vehicleTypeFilter);
+    if (aiRecommendationControls.powertrainFilter !== undefined) setPowertrainFilter(aiRecommendationControls.powertrainFilter);
+    setShowUpdateIndicator(true);
+    const timer = setTimeout(() => setShowUpdateIndicator(false), 3000);
+    return () => clearTimeout(timer);
+  }, [aiRecommendationControls]);
+
   return (
     <div className="space-y-5">
       <section className="surface p-4 sm:p-5">
+        {showUpdateIndicator ? (
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-white"></span>
+            {t({ vi: 'Kết quả đã được cập nhật theo AI', en: 'Results updated from AI request' })}
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="kicker">{t({ vi: 'Danh mục xe', en: 'Vehicle catalog' })}</p>

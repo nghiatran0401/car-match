@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getWizardSteps, type WizardStep } from '../data/wizardSteps';
+import { vehicles } from '../data/vehicles';
 import type { UserProfile } from '../types';
 import { useProfile } from '../context/ProfileContext';
 import { useLanguage } from '../context/LanguageContext';
 import { trackEvent } from '../lib/analytics';
+import { rankAndSort } from '../lib/recommendationScore';
+import { localizeVehicle } from '../lib/localizedVehicle';
 import { getVehicleImage, getVehicleImageSources } from '../lib/vehicleMedia';
 import VehicleImage from '../components/VehicleImage';
 
@@ -30,7 +33,7 @@ function selectedOptionId(step: WizardStep, profile: UserProfile): string | null
 export default function HomePage() {
   const { language, t } = useLanguage();
   const navigate = useNavigate();
-  const { profile, updateProfile, onboarding, setOnboarding, answeredCount, isHydrated, clearWizardAnswers } =
+  const { profile, selections, updateProfile, onboarding, setOnboarding, answeredCount, isHydrated, clearWizardAnswers } =
     useProfile();
   const wizardSteps = useMemo(() => getWizardSteps(language), [language]);
 
@@ -40,6 +43,16 @@ export default function HomePage() {
   const selectedId = useMemo(() => selectedOptionId(step, profile), [step, profile]);
 
   const canBack = stepIndex > 0 && !isFinished;
+  const currentStepNumber = Math.min(stepIndex + 1, wizardSteps.length);
+  const progressPercent = Math.round((answeredCount / wizardSteps.length) * 100);
+  const featuredMatch = useMemo(
+    () =>
+      rankAndSort(vehicles, profile, selections, language)
+        .slice(0, 1)
+        .map(item => ({ ...item, vehicle: localizeVehicle(item.vehicle, language) }))[0],
+    [language, profile, selections],
+  );
+  const [flippingToQuestionnaire, setFlippingToQuestionnaire] = useState(false);
 
   const goSkip = useCallback(() => {
     trackEvent('question_skipped', { questionIndex: stepIndex });
@@ -74,41 +87,124 @@ export default function HomePage() {
     );
   }
 
+  if (isFinished) {
+    return (
+      <div className="mx-auto w-full max-w-[560px]">
+        <aside
+          className={clsx(
+            'overflow-hidden rounded-3xl border border-slate-200 bg-brandSecondary-900 text-white shadow-2xl',
+            flippingToQuestionnaire && 'card-flip-to-questionnaire',
+          )}
+        >
+          <div className="p-5">
+            <p className="text-[11px] uppercase tracking-[0.24em] text-brandSecondary-200">
+              {t({ vi: 'Gợi ý nổi bật theo hồ sơ', en: 'Featured by your profile' })}
+            </p>
+            <h3 className="mt-2 text-xl font-semibold">{featuredMatch?.vehicle.name ?? 'Volvo EC40'}</h3>
+            <p className="mt-1 text-xs text-brandSecondary-100">{featuredMatch?.vehicle.trim}</p>
+            <p className="mt-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
+              {t({ vi: 'Độ phù hợp', en: 'Match confidence' })}: {featuredMatch?.score ?? 82}%
+            </p>
+            <p className="mt-3 text-xs leading-relaxed text-brandSecondary-200">
+              {featuredMatch?.vehicle.thesis ??
+                t({
+                  vi: 'Crossover thuần điện êm ái, tạo ấn tượng cao cấp ngay lần xem đầu.',
+                  en: 'Calm electric crossover for a trust-led first impression.',
+                })}
+            </p>
+            {featuredMatch?.reasons?.length ? (
+              <ul className="mt-3 space-y-1 text-[11px] text-brandSecondary-100">
+                {featuredMatch.reasons.slice(0, 2).map(reason => (
+                  <li key={reason}>• {reason}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link
+                to={`/vehicle/${featuredMatch?.vehicle.modelSlug ?? 'ec40'}`}
+                className="btn-secondary inline-flex border-white/20 bg-white text-slate-900"
+              >
+                {t({ vi: 'Xem chi tiết', en: 'View details' })}
+              </Link>
+              <Link
+                to={`/quote?model=${featuredMatch?.vehicle.modelSlug ?? 'ec40'}`}
+                className="rounded-full border border-white/25 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                {t({ vi: 'Nhận báo giá', en: 'Get quote' })}
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  if (flippingToQuestionnaire) return;
+                  setFlippingToQuestionnaire(true);
+                  window.setTimeout(() => {
+                    clearWizardAnswers();
+                    setFlippingToQuestionnaire(false);
+                  }, 520);
+                }}
+                className="rounded-full border border-white/25 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                {t({ vi: 'Sửa câu trả lời', en: 'Edit answers' })}
+              </button>
+            </div>
+          </div>
+          <VehicleImage
+            src={getVehicleImage(featuredMatch?.vehicle.modelSlug ?? 'ec40')}
+            fallbackSources={getVehicleImageSources(featuredMatch?.vehicle.modelSlug ?? 'ec40').slice(1)}
+            alt={featuredMatch?.vehicle.name ?? 'Volvo EC40'}
+            className="h-64 w-full object-cover"
+          />
+        </aside>
+      </div>
+    );
+  }
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
+    <div className="relative">
       <section className="surface p-5 sm:p-6">
-        <p className="kicker">CarMatch</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-          {t({ vi: 'Showroom thông minh được cá nhân hóa cho bạn.', en: 'A smart dealership crafted for you.' })}
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-base">
-          {t({
-            vi: 'Từng câu hỏi ngắn giúp bạn chốt nhanh hơn, không bị quá tải lựa chọn.',
-            en: 'One guided question at a time, so the buyer can move forward without getting buried in options.',
-          })}
-        </p>
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white to-slate-50 p-4 sm:p-5">
+          <p className="kicker">CarMatch</p>
+          <h1 className="mt-2 whitespace-nowrap text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+            {t({ vi: 'Showroom thông minh được cá nhân hóa cho bạn.', en: 'A smart dealership crafted for you.' })}
+          </h1>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+            {t({
+              vi: 'Tư vấn ngắn gọn theo đúng nhu cầu để bạn ra quyết định tự tin hơn, nhanh hơn và ít rủi ro hơn.',
+              en: 'Guided recommendations tailored to your goals so you can decide faster, with more confidence and less risk.',
+            })}
+          </p>
+        </div>
 
         {!isFinished ? (
-          <div className="mt-6">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
               <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  {t({ vi: 'Bước', en: 'Step' })} {currentStepNumber}/{wizardSteps.length}
+                </p>
                 <p className="kicker">{step.questionLabel}</p>
-                <h2 className="mt-1 text-xl font-semibold text-slate-900">{step.title}</h2>
-                <p className="mt-1 text-sm text-slate-500">{step.helper}</p>
+                <h2 className="mt-1 text-base font-semibold text-slate-900">{step.title}</h2>
+                <p className="mt-0.5 text-xs text-slate-500">{step.helper}</p>
               </div>
-              <div className="surface-muted px-3 py-2 text-sm font-semibold text-slate-700">
-                {answeredCount}/5 {t({ vi: 'đã trả lời', en: 'answered' })}
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700">
+                {answeredCount}/{wizardSteps.length} {t({ vi: 'đã trả lời', en: 'answered' })}
               </div>
             </div>
-            <div className="mb-4 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
               <div
-                className="h-full rounded-full bg-slate-900 transition-all"
-                style={{ width: `${(answeredCount / 5) * 100}%` }}
+                className="h-full rounded-full bg-emerald-600 transition-all"
+                style={{ width: `${progressPercent}%` }}
               />
             </div>
+            <p className="mb-3 text-[11px] text-slate-500">
+              {t({
+                vi: 'Trả lời nhanh để hệ thống đưa ra shortlist chính xác hơn theo nhu cầu của bạn.',
+                en: 'Quick answers help the system deliver a more accurate shortlist.',
+              })}
+            </p>
 
             <div className="grid gap-2.5 sm:grid-cols-2">
-              {step.options.map(option => {
+              {step.options.slice(0, 4).map(option => {
                 const active = selectedId === option.id;
                 return (
                   <button
@@ -127,14 +223,14 @@ export default function HomePage() {
                       }, 200);
                     }}
                     className={clsx(
-                      'min-h-[64px] rounded-2xl border px-4 py-3 text-left transition',
+                      'min-h-[70px] rounded-xl border px-3.5 py-2.5 text-left transition',
                       active
-                        ? 'border-slate-900 bg-slate-900 text-white'
-                        : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300',
+                        ? 'border-slate-900 bg-slate-900 text-white shadow-md'
+                        : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:shadow-sm',
                     )}
                   >
-                    <p className="text-sm font-semibold">{option.title}</p>
-                    <p className={clsx('mt-1 text-xs', active ? 'text-slate-200' : 'text-slate-500')}>
+                    <p className="text-[15px] font-semibold leading-tight">{option.title}</p>
+                    <p className={clsx('mt-0.5 text-xs leading-snug', active ? 'text-slate-200' : 'text-slate-500')}>
                       {option.description}
                     </p>
                   </button>
@@ -142,76 +238,32 @@ export default function HomePage() {
               })}
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={goBack}
                 disabled={!canBack}
-                className="btn-secondary disabled:opacity-40"
+                className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-40"
               >
                 {t({ vi: 'Quay lại', en: 'Back' })}
               </button>
               <button
                 type="button"
                 onClick={goSkip}
-                className="btn-secondary border-transparent text-slate-500 hover:text-slate-900"
+                className="btn-secondary border-transparent px-3 py-1.5 text-xs text-slate-500 hover:text-slate-900"
               >
-                {t({ vi: 'Bỏ qua', en: 'Skip' })}
+                {t({ vi: 'Chưa chắc, để sau', en: 'Not sure yet' })}
               </button>
             </div>
-          </div>
-        ) : (
-          <div className="mt-6 surface-muted p-4 sm:p-5">
-            <p className="kicker">{t({ vi: 'Hoàn thành', en: 'Journey complete' })}</p>
-            <h2 className="mt-1 text-xl font-bold">
-              {t({ vi: 'Danh sách đề xuất của bạn đã sẵn sàng.', en: 'Your shortlist is ready.' })}
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-[11px] text-slate-500">
               {t({
-                vi: 'Tiếp tục xem đề xuất, so sánh các lựa chọn và chuyển sang báo giá hoặc đặt lịch showroom.',
-                en: 'Continue to recommendations, compare your top picks, and move into quote or showroom booking.',
+                vi: 'Mọi lựa chọn đều có thể chỉnh sửa lại sau trong hồ sơ.',
+                en: 'You can always edit these answers later in your profile.',
               })}
             </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link to="/recommendations" className="btn-primary">
-                {t({ vi: 'Mở đề xuất', en: 'Open recommendations' })}
-              </Link>
-              <button
-                type="button"
-                onClick={clearWizardAnswers}
-                className="btn-secondary"
-              >
-                {t({ vi: 'Sửa câu trả lời', en: 'Edit answers' })}
-              </button>
-            </div>
           </div>
-        )}
+        ) : null}
       </section>
-
-      <aside className="surface overflow-hidden bg-brandSecondary-900 text-white">
-        <div className="p-5 sm:p-6">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-brandSecondary-200">CarMatch featured pick</p>
-          <h3 className="mt-2 text-2xl font-semibold">Volvo EC40</h3>
-          <p className="mt-2 text-sm leading-relaxed text-brandSecondary-200">
-            {t({
-              vi: 'Crossover thuần điện êm ái, tạo ấn tượng cao cấp ngay lần xem đầu.',
-              en: 'Calm electric crossover for a trust-led first impression.',
-            })}
-          </p>
-          <Link
-            to="/vehicle/ec40"
-            className="btn-secondary mt-4 inline-flex border-white/20 bg-white text-slate-900"
-          >
-            {t({ vi: 'Xem chi tiết', en: 'View details' })}
-          </Link>
-        </div>
-        <VehicleImage
-          src={getVehicleImage('ec40')}
-          fallbackSources={getVehicleImageSources('ec40').slice(1)}
-          alt="Volvo EC40"
-          className="h-64 w-full object-cover"
-        />
-      </aside>
     </div>
   );
 }

@@ -67,7 +67,7 @@ export default function VehicleDetailPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to={`/quote?model=${vehicle.modelSlug}&variant=${variantKey}`} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-              {t({ vi: 'Nhận báo giá', en: 'Get quote' })}
+              {t({ vi: 'Nhận báo giá ưu tiên', en: 'Get priority quote' })}
             </Link>
             <button
               type="button"
@@ -136,7 +136,27 @@ export default function VehicleDetailPage() {
             <p className="mt-4 text-2xl font-bold text-slate-900">
               {t({ vi: 'Từ', en: 'From' })} {effectivePriceMil.toLocaleString('vi-VN')}m VND
             </p>
+            <p className="mt-1 text-xs text-emerald-700">
+              {t({
+                vi: 'Tư vấn minh bạch chi phí lăn bánh và phương án vay trước khi chốt.',
+                en: 'Transparent support for on-road costs and financing before you commit.',
+              })}
+            </p>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">{vehicle.thesis}</p>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">{t({ vi: 'Dòng xe', en: 'Type' })}</p>
+                <p className="text-xs font-semibold text-slate-900">{vehicle.vehicleType.toUpperCase()}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">{t({ vi: 'Nhiên liệu', en: 'Powertrain' })}</p>
+                <p className="text-xs font-semibold text-slate-900">{vehicle.powertrain.toUpperCase()}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">{t({ vi: 'Mức giá', en: 'Price band' })}</p>
+                <p className="text-xs font-semibold text-slate-900">{vehicle.priceBand}</p>
+              </div>
+            </div>
 
             <div className="surface-muted mt-4 p-4">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
@@ -158,9 +178,18 @@ export default function VehicleDetailPage() {
               <p className="mt-3 text-base font-semibold text-slate-900">
                 ≈ {monthly.toLocaleString('vi-VN')} VND {t({ vi: '/ tháng', en: '/ month' })}
               </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {t({
+                  vi: 'Ước tính tham khảo, chưa bao gồm phí đăng ký, bảo hiểm và ưu đãi theo thời điểm.',
+                  en: 'Reference estimate only; excludes registration fees, insurance, and time-based promotions.',
+                })}
+              </p>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
+              <Link to={`/quote?model=${vehicle.modelSlug}&variant=${variantKey}`} className="btn-primary px-4 py-2 text-sm">
+                {t({ vi: 'Tiếp tục nhận báo giá', en: 'Continue to quote' })}
+              </Link>
               <Link to="/showrooms" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
                 {t({ vi: 'Lên lịch ghé showroom', en: 'Plan showroom visit' })}
               </Link>

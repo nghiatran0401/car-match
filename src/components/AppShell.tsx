@@ -1,7 +1,7 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { clsx } from 'clsx';
-import { Car, LayoutGrid, SlidersHorizontal, Receipt } from 'lucide-react';
+import { Car, LayoutGrid, SlidersHorizontal, Receipt, Sparkles } from 'lucide-react';
 import { useCompare } from '../context/CompareContext';
 import { useLanguage } from '../context/LanguageContext';
 import GlobalChatWidget from './GlobalChatWidget';
@@ -37,7 +37,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         {t({ vi: 'Bỏ qua đến nội dung', en: 'Skip to content' })}
       </a>
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <Link to="/" className="min-w-0">
             <p className="kicker truncate">CarMatch</p>
             <p className="truncate text-sm font-bold sm:text-base">Find Your Best-Fit Car, Faster</p>
@@ -62,6 +62,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-2">
+            {count > 0 ? (
+              <Link
+                to="/compare"
+                className="hidden items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 lg:inline-flex"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {t({ vi: 'Đang so sánh', en: 'Comparing' })} ({count})
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={toggleLanguage}
@@ -84,11 +93,33 @@ export default function AppShell({ children }: { children: ReactNode }) {
         id="main-content"
         className={clsx(
           'mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-4 sm:px-6 sm:py-6',
+          'max-w-[1200px]',
           location.pathname === '/'
             ? 'pb-[calc(7.2rem+env(safe-area-inset-bottom))] md:pb-6'
             : 'pb-[calc(6.4rem+env(safe-area-inset-bottom))] md:pb-6',
         )}
       >
+        {location.pathname !== '/' ? (
+          <section className="mb-4 grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                {t({
+                  vi: 'Hành trình mua xe có hướng dẫn, minh bạch và cá nhân hóa',
+                  en: 'Guided, transparent, and personalized buying journey',
+                })}
+              </p>
+              <p className="text-xs text-slate-500">
+                {t({
+                  vi: 'Hồ sơ → Đề xuất → So sánh → Báo giá. Mọi bước đều có AI đồng hành.',
+                  en: 'Profile → Matches → Compare → Quote. AI supports every step.',
+                })}
+              </p>
+            </div>
+            <Link to="/profile" className="btn-secondary justify-self-start px-3 py-2 text-xs sm:justify-self-end">
+              {t({ vi: 'Cập nhật hồ sơ', en: 'Refine profile' })}
+            </Link>
+          </section>
+        ) : null}
         <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_370px] lg:gap-5">
           <section className="min-w-0">{children}</section>
           <aside className="hidden lg:block">

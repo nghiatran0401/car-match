@@ -12,7 +12,7 @@ import VehicleImage from '../components/VehicleImage';
 
 export default function RecommendationsPage() {
   const { language, t } = useLanguage();
-  const { profile, isHydrated, selections } = useProfile();
+  const { profile, isHydrated, selections, aiRecommendationControls } = useProfile();
   const { toggleVehicle, isInCompare, count } = useCompare();
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<'best-match' | 'price-low' | 'price-high' | 'name-az'>('best-match');
@@ -21,6 +21,7 @@ export default function RecommendationsPage() {
 
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
   const mainContentRef = useRef<HTMLDivElement>(null);
+  const hasActiveFilters = query.trim().length > 0 || sortBy !== 'best-match' || vehicleTypeFilter !== 'all' || powertrainFilter !== 'all';
 
   const shortlist = useMemo(() => {
     let ranked = rankAndSort(vehicles, profile, selections, language).map(item => ({
@@ -63,24 +64,28 @@ export default function RecommendationsPage() {
 
     return sorted.slice(0, 9);
   }, [profile, selections, powertrainFilter, query, sortBy, vehicleTypeFilter, language]);
+  const topPick = shortlist[0];
 
   useEffect(() => {
     if (isHydrated) trackEvent('shortlist_viewed');
   }, [isHydrated]);
 
-  // Scroll to top of recommendations when profile changes
   useEffect(() => {
-    if (mainContentRef.current) {
-      const yOffset = -80;
-      const element = mainContentRef.current;
-      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
-      window.scrollTo({ top: y, behavior: 'smooth' });
-      setShowUpdateIndicator(true);
-      const timer = setTimeout(() => setShowUpdateIndicator(false), 3000);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
+    setShowUpdateIndicator(true);
+    const timer = setTimeout(() => setShowUpdateIndicator(false), 3000);
+    return () => clearTimeout(timer);
   }, [profile, selections]);
+
+  useEffect(() => {
+    if (!aiRecommendationControls || aiRecommendationControls.source !== 'ai-copilot') return;
+    if (aiRecommendationControls.query !== undefined) setQuery(aiRecommendationControls.query);
+    if (aiRecommendationControls.sortBy !== undefined) setSortBy(aiRecommendationControls.sortBy);
+    if (aiRecommendationControls.vehicleTypeFilter !== undefined) setVehicleTypeFilter(aiRecommendationControls.vehicleTypeFilter);
+    if (aiRecommendationControls.powertrainFilter !== undefined) setPowertrainFilter(aiRecommendationControls.powertrainFilter);
+    setShowUpdateIndicator(true);
+    const timer = setTimeout(() => setShowUpdateIndicator(false), 3000);
+    return () => clearTimeout(timer);
+  }, [aiRecommendationControls]);
 
   if (!isHydrated) {
     return (
@@ -109,6 +114,12 @@ export default function RecommendationsPage() {
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
               {t({ vi: 'Các lựa chọn phù hợp nhất với hồ sơ của bạn', en: 'Top matches for your profile' })}
             </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {t({
+                vi: 'Danh sách được cá nhân hóa theo hồ sơ, mục tiêu sử dụng, và mức ngân sách của bạn.',
+                en: 'This list is personalized to your profile, use case, and budget range.',
+              })}
+            </p>
           </div>
           <div className="flex gap-2">
             <span className="surface-muted px-3 py-2 text-sm font-semibold text-slate-700">
@@ -122,7 +133,31 @@ export default function RecommendationsPage() {
           </div>
         </div>
 
-        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr]">
+        {topPick ? (
+          <section className="mb-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-cyan-50 p-3 sm:p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700">
+              {t({ vi: 'Lựa chọn nổi bật', en: 'Top recommendation' })}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-base font-bold text-slate-900">{topPick.vehicle.name}</p>
+                <p className="text-sm text-slate-600">
+                  {t({ vi: 'Độ phù hợp', en: 'Match confidence' })}: {topPick.score}% · {topPick.vehicle.priceBand}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link to={`/vehicle/${topPick.vehicle.modelSlug}`} className="btn-primary px-3 py-2 text-xs">
+                  {t({ vi: 'Xem chi tiết ngay', en: 'View details now' })}
+                </Link>
+                <Link to={`/quote?model=${topPick.vehicle.modelSlug}`} className="btn-secondary px-3 py-2 text-xs">
+                  {t({ vi: 'Nhận báo giá nhanh', en: 'Get instant quote' })}
+                </Link>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_auto]">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {t({ vi: 'Tìm kiếm', en: 'Search' })}
             <input
@@ -175,18 +210,38 @@ export default function RecommendationsPage() {
               <option value="ev">EV</option>
             </select>
           </label>
+          <div className="flex items-end">
+            <button
+              type="button"
+              disabled={!hasActiveFilters}
+              onClick={() => {
+                setQuery('');
+                setSortBy('best-match');
+                setVehicleTypeFilter('all');
+                setPowertrainFilter('all');
+              }}
+              className="btn-secondary min-h-[42px] w-full px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {t({ vi: 'Đặt lại bộ lọc', en: 'Reset filters' })}
+            </button>
+          </div>
         </div>
 
         {shortlist.length === 0 ? (
           <div className="surface-muted p-5 text-sm text-slate-600">
-            {t({
-              vi: 'Không có mẫu xe phù hợp với tổ hợp tìm kiếm/sắp xếp/lọc hiện tại. Hãy đặt lại bộ lọc để xem lại toàn bộ.',
-              en: 'No vehicles match your current search/sort/filter combination. Reset filters to reopen the full shortlist.',
-            })}
+            <p className="font-semibold text-slate-900">
+              {t({ vi: 'Không tìm thấy lựa chọn phù hợp', en: 'No matches found for this setup' })}
+            </p>
+            <p className="mt-1">
+              {t({
+                vi: 'Hãy nới điều kiện tìm kiếm hoặc đặt lại bộ lọc để quay lại toàn bộ danh sách đề xuất.',
+                en: 'Try broader criteria or reset filters to return to your full recommendation list.',
+              })}
+            </p>
           </div>
         ) : null}
 
-        <div className={clsx('grid gap-3 md:grid-cols-2 xl:grid-cols-3', showUpdateIndicator && 'animate-pulse')}>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {shortlist.map((item, index) => {
             const { vehicle, score, reasons } = item;
             const inCompare = isInCompare(vehicle.id);
@@ -222,6 +277,12 @@ export default function RecommendationsPage() {
                     <li key={i}>• {r}</li>
                   ))}
                 </ul>
+                <p className="mt-2 text-xs text-slate-500">
+                  {t({
+                    vi: 'Giá và ưu đãi thực tế có thể thay đổi theo khu vực và thời điểm.',
+                    en: 'Final pricing and incentives may vary by location and timing.',
+                  })}
+                </p>
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <Link
                     to={`/vehicle/${vehicle.modelSlug}`}
@@ -241,7 +302,7 @@ export default function RecommendationsPage() {
                     {inCompare ? t({ vi: 'Đang so sánh', en: 'In compare' }) : t({ vi: 'So sánh', en: 'Compare' })}
                   </button>
                   <Link to={`/quote?model=${vehicle.modelSlug}`} className="btn-secondary col-span-2 min-h-[40px] border-slate-900 px-3 py-2 text-center text-xs text-slate-900 sm:col-span-1">
-                    {t({ vi: 'Báo giá', en: 'Quote' })}
+                    {t({ vi: 'Nhận báo giá', en: 'Get quote' })}
                   </Link>
                 </div>
               </article>
