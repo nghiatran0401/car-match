@@ -11,53 +11,33 @@ type SessionPhase =
   | "processing"
   | "speaking";
 
-type ChatHistoryMessage = {
-  role: Role;
-  content: string;
-};
-
 type TimelineMessage = {
   id: string;
   role: Role;
   text: string;
   language?: string;
-  emotion?: string;
-};
-
-type VoiceTurnResponse = {
-  transcript: {
-    text: string;
-    language?: string;
-    emotion?: string;
-  };
-  assistant: {
-    text: string;
-    audioDataUrl?: string | null;
-    audioMimeType?: string | null;
-  };
-};
-
-type ErrorResponse = {
-  detail?: string;
 };
 
 type MicSession = {
   stream: MediaStream;
   audioContext: AudioContext;
   source: MediaStreamAudioSourceNode;
+  filter: BiquadFilterNode;
   analyser: AnalyserNode;
   processor: ScriptProcessorNode;
   sink: GainNode;
   rafId: number | null;
-  sampleRate: number;
 };
 
-type ActiveUtterance = {
-  active: boolean;
-  startedAt: number;
-  lastSpeechAt: number;
-  loudFrames: number;
-  peak: number;
+type PlaybackSession = {
+  audioContext: AudioContext | null;
+  nextPlaybackTime: number;
+  activeSources: Set<AudioBufferSourceNode>;
+};
+
+type RealtimeEvent = {
+  type?: string;
+  [key: string]: unknown;
 };
 
 const API_BASE =
@@ -65,34 +45,32 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   "/api";
 
+const EXPLICIT_REALTIME_WS_URL = process.env.NEXT_PUBLIC_REALTIME_WS_URL ?? null;
+
 const LANGUAGE_OPTIONS = [
   { value: "auto", label: "Auto detect" },
-  { value: "en", label: "English" },
   { value: "vi", label: "Vietnamese" },
+  { value: "en", label: "English" },
   { value: "zh", label: "Chinese" },
 ];
 
 const VOICE_OPTIONS = [
-  { value: "Cherry", label: "Cherry" },
-  { value: "Ethan", label: "Ethan" },
+  { value: "Tina", label: "Tina" },
+  { value: "Hana", label: "Hana" },
+  { value: "Liora Mira", label: "Liora Mira" },
   { value: "Serena", label: "Serena" },
-  { value: "Chelsie", label: "Chelsie" },
+  { value: "Raymond", label: "Raymond" },
+  { value: "Ethan", label: "Ethan" },
 ];
 
 const INITIAL_MESSAGE: TimelineMessage = {
   id: crypto.randomUUID(),
   role: "assistant",
-  text: "Tap the mic to enter voice mode. Once it is on, just speak naturally and pause when you're done.",
+  text: "Tap the mic to start realtime voice mode. Once connected, just speak naturally and pause when you're done.",
 };
 
 const INITIAL_METER = new Array(18).fill(0.08);
-const SPEECH_THRESHOLD = 0.014;
-const BARGE_IN_THRESHOLD = 0.022;
-const SILENCE_MS = 2000;
-const MIN_UTTERANCE_MS = 350;
-const MIN_LOUD_FRAMES = 2;
-const MAX_UTTERANCE_MS = 18000;
-const MAX_HISTORY_ITEMS = 8;
+const OUTPUT_SAMPLE_RATE = 24000;
 
 export function VoiceStudio() {
   const [messages, setMessages] = useState<TimelineMessage[]>([INITIAL_MESSAGE]);
@@ -100,28 +78,27 @@ export function VoiceStudio() {
   const [status, setStatus] = useState("Tap the mic to start voice mode.");
   const [error, setError] = useState<string | null>(null);
   const [languageHint, setLanguageHint] = useState("auto");
-  const [voice, setVoice] = useState("Cherry");
+  const [voice, setVoice] = useState("Tina");
   const [meterValues, setMeterValues] = useState<number[]>(INITIAL_METER);
   const [signalLevel, setSignalLevel] = useState(0.08);
   const [showSettings, setShowSettings] = useState(false);
 
   const micRef = useRef<MicSession | null>(null);
-  const messagesRef = useRef<TimelineMessage[]>([INITIAL_MESSAGE]);
-  const utteranceRef = useRef<ActiveUtterance>({
-    active: false,
-    startedAt: 0,
-    lastSpeechAt: 0,
-    loudFrames: 0,
-    peak: 0,
+  const playbackRef = useRef<PlaybackSession>({
+    audioContext: null,
+    nextPlaybackTime: 0,
+    activeSources: new Set(),
   });
-  const turnFramesRef = useRef<Float32Array[]>([]);
+  const socketRef = useRef<WebSocket | null>(null);
   const sessionActiveRef = useRef(false);
-  const processingRef = useRef(false);
-  const assistantSpeakingRef = useRef(false);
-  const audioReplyRef = useRef<HTMLAudioElement | null>(null);
-  const fetchAbortRef = useRef<AbortController | null>(null);
+  const realtimeReadyRef = useRef(false);
+  const responseActiveRef = useRef(false);
+  const responseDoneRef = useRef(false);
+  const assistantAudioActiveRef = useRef(false);
   const phaseRef = useRef<SessionPhase>("idle");
-  const requestIdRef = useRef(0);
+  const messagesRef = useRef<TimelineMessage[]>([INITIAL_MESSAGE]);
+  const assistantDraftIdRef = useRef<string | null>(null);
+  const assistantTranscriptRef = useRef("");
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -132,6 +109,18 @@ export function VoiceStudio() {
       void endVoiceSession({ preserveMessages: true, quiet: true });
     };
   }, []);
+
+  useEffect(() => {
+    if (!sessionActiveRef.current || !realtimeReadyRef.current) {
+      return;
+    }
+
+    sendRealtimeEvent({
+      type: "session.configure",
+      voice,
+      languageHint,
+    });
+  }, [languageHint, voice]);
 
   function setPhaseAndStatus(nextPhase: SessionPhase, nextStatus: string) {
     phaseRef.current = nextPhase;
@@ -144,6 +133,43 @@ export function VoiceStudio() {
     startTransition(() => {
       setMessages(nextMessages);
     });
+  }
+
+  function appendMessage(message: TimelineMessage) {
+    replaceMessages([...messagesRef.current, message]);
+  }
+
+  function upsertAssistantMessage(text: string, final = false) {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      if (final) {
+        assistantDraftIdRef.current = null;
+        assistantTranscriptRef.current = "";
+      }
+      return;
+    }
+
+    const existingId = assistantDraftIdRef.current;
+    if (!existingId) {
+      const nextId = crypto.randomUUID();
+      assistantDraftIdRef.current = nextId;
+      appendMessage({
+        id: nextId,
+        role: "assistant",
+        text: trimmed,
+      });
+    } else {
+      replaceMessages(
+        messagesRef.current.map((message) =>
+          message.id === existingId ? { ...message, text: trimmed } : message
+        )
+      );
+    }
+
+    if (final) {
+      assistantDraftIdRef.current = null;
+      assistantTranscriptRef.current = "";
+    }
   }
 
   async function startVoiceSession() {
@@ -160,7 +186,7 @@ export function VoiceStudio() {
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false,
         },
       });
 
@@ -170,6 +196,11 @@ export function VoiceStudio() {
       }
 
       const source = audioContext.createMediaStreamSource(stream);
+      const filter = audioContext.createBiquadFilter();
+      filter.type = "highpass";
+      filter.frequency.value = 140;
+      filter.Q.value = 0.7;
+
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 1024;
       analyser.smoothingTimeConstant = 0.82;
@@ -178,30 +209,49 @@ export function VoiceStudio() {
       const sink = audioContext.createGain();
       sink.gain.value = 0;
 
-      source.connect(analyser);
+      source.connect(filter);
+      filter.connect(analyser);
       analyser.connect(processor);
       processor.connect(sink);
       sink.connect(audioContext.destination);
 
       processor.onaudioprocess = (event) => {
         const input = event.inputBuffer.getChannelData(0);
-        handleAudioFrame(new Float32Array(input), performance.now());
+        const socket = socketRef.current;
+        if (
+          !sessionActiveRef.current ||
+          !realtimeReadyRef.current ||
+          !socket ||
+          socket.readyState !== WebSocket.OPEN
+        ) {
+          return;
+        }
+
+        sendRealtimeEvent({
+          type: "input_audio_buffer.append",
+          audio: float32ToPcmBase64(input),
+        });
       };
 
       micRef.current = {
         stream,
         audioContext,
         source,
+        filter,
         analyser,
         processor,
         sink,
         rafId: null,
-        sampleRate: audioContext.sampleRate,
       };
 
       sessionActiveRef.current = true;
+      realtimeReadyRef.current = false;
+      responseActiveRef.current = false;
+      responseDoneRef.current = false;
+      assistantAudioActiveRef.current = false;
       runMeterLoop();
-      setPhaseAndStatus("listening", "I'm here and listening.");
+      setPhaseAndStatus("requesting", "Connecting to the realtime voice model...");
+      connectRealtimeSocket();
     } catch (caughtError) {
       const message =
         caughtError instanceof Error
@@ -218,9 +268,19 @@ export function VoiceStudio() {
     quiet?: boolean;
   }) {
     sessionActiveRef.current = false;
-    resetUtterance();
-    abortInFlightTurn();
-    stopAssistantSpeech();
+    realtimeReadyRef.current = false;
+    responseActiveRef.current = false;
+    responseDoneRef.current = false;
+    assistantDraftIdRef.current = null;
+    assistantTranscriptRef.current = "";
+
+    const socket = socketRef.current;
+    socketRef.current = null;
+    if (socket && socket.readyState <= WebSocket.OPEN) {
+      socket.close();
+    }
+
+    stopAssistantAudio({ keepContext: false });
     await cleanupMic();
 
     setMeterValues(INITIAL_METER);
@@ -243,6 +303,178 @@ export function VoiceStudio() {
     }
   }
 
+  function connectRealtimeSocket() {
+    const socket = new WebSocket(getRealtimeWsUrl());
+    socketRef.current = socket;
+
+    socket.addEventListener("open", () => {
+      setError(null);
+      sendRealtimeEvent({
+        type: "session.configure",
+        voice,
+        languageHint,
+      });
+    });
+
+    socket.addEventListener("message", (message) => {
+      try {
+        handleRealtimeEvent(JSON.parse(String(message.data)) as RealtimeEvent);
+      } catch (caughtError) {
+        const detail =
+          caughtError instanceof Error ? caughtError.message : "Invalid realtime event.";
+        setError(detail);
+      }
+    });
+
+    socket.addEventListener("error", () => {
+      setError("Realtime connection failed.");
+      if (sessionActiveRef.current) {
+        setPhaseAndStatus("idle", "Realtime connection failed.");
+      }
+    });
+
+    socket.addEventListener("close", () => {
+      realtimeReadyRef.current = false;
+      responseActiveRef.current = false;
+      if (!sessionActiveRef.current) {
+        return;
+      }
+      void endVoiceSession({ preserveMessages: true, quiet: true });
+      setError("Realtime session ended.");
+      setPhaseAndStatus("idle", "Realtime session ended.");
+    });
+  }
+
+  function sendRealtimeEvent(event: Record<string, unknown>) {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    socket.send(JSON.stringify(event));
+  }
+
+  function handleRealtimeEvent(event: RealtimeEvent) {
+    const eventType = event.type;
+    if (!eventType) {
+      return;
+    }
+
+    switch (eventType) {
+      case "session.created":
+      case "session.updated": {
+        realtimeReadyRef.current = true;
+        if (
+          sessionActiveRef.current &&
+          phaseRef.current !== "capturing" &&
+          phaseRef.current !== "speaking" &&
+          phaseRef.current !== "processing"
+        ) {
+          setPhaseAndStatus("listening", "I'm here and listening.");
+        }
+        return;
+      }
+      case "input_audio_buffer.speech_started": {
+        if (assistantAudioActiveRef.current || responseActiveRef.current) {
+          stopAssistantAudio();
+          sendRealtimeEvent({ type: "response.cancel" });
+        }
+        responseActiveRef.current = false;
+        responseDoneRef.current = false;
+        setPhaseAndStatus("capturing", "Listening...");
+        return;
+      }
+      case "input_audio_buffer.speech_stopped": {
+        setPhaseAndStatus("processing", "Thinking...");
+        return;
+      }
+      case "conversation.item.input_audio_transcription.completed": {
+        const transcript =
+          typeof event.transcript === "string" ? event.transcript.trim() : "";
+        if (!transcript) {
+          return;
+        }
+        appendMessage({
+          id: crypto.randomUUID(),
+          role: "user",
+          text: transcript,
+        });
+        return;
+      }
+      case "response.created": {
+        responseActiveRef.current = true;
+        responseDoneRef.current = false;
+        assistantDraftIdRef.current = null;
+        assistantTranscriptRef.current = "";
+        setPhaseAndStatus("processing", "Thinking...");
+        return;
+      }
+      case "response.audio_transcript.delta": {
+        const delta = typeof event.delta === "string" ? event.delta : "";
+        if (!delta) {
+          return;
+        }
+        assistantTranscriptRef.current += delta;
+        upsertAssistantMessage(assistantTranscriptRef.current);
+        return;
+      }
+      case "response.audio_transcript.done": {
+        const transcript =
+          typeof event.transcript === "string"
+            ? event.transcript
+            : assistantTranscriptRef.current;
+        upsertAssistantMessage(transcript, true);
+        return;
+      }
+      case "response.audio.delta": {
+        const delta = typeof event.delta === "string" ? event.delta : "";
+        if (!delta) {
+          return;
+        }
+        void enqueueAssistantAudio(delta);
+        setPhaseAndStatus("speaking", "Speaking. Cut in whenever you want.");
+        return;
+      }
+      case "response.audio.done": {
+        responseDoneRef.current = true;
+        maybeReturnToListening();
+        return;
+      }
+      case "response.done": {
+        responseActiveRef.current = false;
+        responseDoneRef.current = true;
+        maybeReturnToListening();
+        return;
+      }
+      case "error": {
+        const detail =
+          typeof event.error === "object" &&
+          event.error !== null &&
+          "message" in event.error &&
+          typeof (event.error as { message?: unknown }).message === "string"
+            ? String((event.error as { message?: unknown }).message)
+            : "Realtime request failed.";
+        setError(detail);
+        if (sessionActiveRef.current) {
+          setPhaseAndStatus("listening", "The mic is still on. Try again.");
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  function maybeReturnToListening() {
+    if (
+      sessionActiveRef.current &&
+      responseDoneRef.current &&
+      !assistantAudioActiveRef.current &&
+      phaseRef.current !== "capturing"
+    ) {
+      setPhaseAndStatus("listening", "I'm here and listening.");
+    }
+  }
+
   async function cleanupMic() {
     const mic = micRef.current;
     if (!mic) {
@@ -252,8 +484,10 @@ export function VoiceStudio() {
     if (mic.rafId) {
       cancelAnimationFrame(mic.rafId);
     }
+
     mic.processor.onaudioprocess = null;
     mic.source.disconnect();
+    mic.filter.disconnect();
     mic.analyser.disconnect();
     mic.processor.disconnect();
     mic.sink.disconnect();
@@ -266,273 +500,74 @@ export function VoiceStudio() {
     micRef.current = null;
   }
 
-  function handleAudioFrame(frame: Float32Array, now: number) {
-    if (!sessionActiveRef.current) {
-      return;
+  async function getPlaybackContext() {
+    let context = playbackRef.current.audioContext;
+    if (!context || context.state === "closed") {
+      context = new AudioContext();
+      playbackRef.current.audioContext = context;
+      playbackRef.current.nextPlaybackTime = context.currentTime;
     }
-
-    const utterance = utteranceRef.current;
-    const rms = calculateRms(frame);
-    const threshold =
-      assistantSpeakingRef.current || processingRef.current
-        ? BARGE_IN_THRESHOLD
-        : SPEECH_THRESHOLD;
-
-    if (rms >= threshold) {
-      if (!utterance.active) {
-        interruptCurrentTurn();
-        utterance.active = true;
-        utterance.startedAt = now;
-        utterance.lastSpeechAt = now;
-        utterance.loudFrames = 1;
-        utterance.peak = rms;
-        turnFramesRef.current = [frame];
-        setPhaseAndStatus(
-          "capturing",
-          "Keep talking. I will answer when you pause for two seconds."
-        );
-        return;
-      }
-
-      utterance.lastSpeechAt = now;
-      utterance.loudFrames += 1;
-      utterance.peak = Math.max(utterance.peak, rms);
-      turnFramesRef.current.push(frame);
-
-      if (phaseRef.current !== "capturing") {
-        setPhaseAndStatus(
-          "capturing",
-          "Keep talking. I will answer when you pause for two seconds."
-        );
-      }
-
-      if (now - utterance.startedAt >= MAX_UTTERANCE_MS) {
-        finalizeUtterance();
-      }
-      return;
+    if (context.state === "suspended") {
+      await context.resume();
     }
-
-    if (!utterance.active) {
-      return;
-    }
-
-    turnFramesRef.current.push(frame);
-
-    const elapsed = now - utterance.startedAt;
-    const silenceElapsed = now - utterance.lastSpeechAt;
-    if (
-      elapsed >= MIN_UTTERANCE_MS &&
-      utterance.loudFrames >= MIN_LOUD_FRAMES &&
-      silenceElapsed >= SILENCE_MS
-    ) {
-      finalizeUtterance();
-    }
+    return context;
   }
 
-  function finalizeUtterance() {
-    const mic = micRef.current;
-    const utterance = utteranceRef.current;
-    if (!mic || !utterance.active || !sessionActiveRef.current) {
+  async function enqueueAssistantAudio(base64Pcm: string) {
+    const audioContext = await getPlaybackContext();
+    const samples = decodePcmBase64(base64Pcm);
+    if (samples.length === 0) {
       return;
     }
 
-    const snapshot = turnFramesRef.current.slice();
-    const sampleRate = mic.sampleRate;
-    const peak = utterance.peak;
-    resetUtterance();
+    const buffer = audioContext.createBuffer(1, samples.length, OUTPUT_SAMPLE_RATE);
+    buffer.copyToChannel(samples, 0);
 
-    const audioBlob = encodeWav(snapshot, sampleRate);
-    if (audioBlob.size <= 44 || peak < SPEECH_THRESHOLD) {
-      if (
-        sessionActiveRef.current &&
-        !assistantSpeakingRef.current &&
-        !processingRef.current
-      ) {
-        setPhaseAndStatus("listening", "I'm here and listening.");
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+
+    const scheduledAt = Math.max(
+      audioContext.currentTime + 0.02,
+      playbackRef.current.nextPlaybackTime
+    );
+    playbackRef.current.nextPlaybackTime = scheduledAt + buffer.duration;
+    playbackRef.current.activeSources.add(source);
+    assistantAudioActiveRef.current = true;
+
+    source.addEventListener("ended", () => {
+      playbackRef.current.activeSources.delete(source);
+      if (playbackRef.current.activeSources.size === 0) {
+        assistantAudioActiveRef.current = false;
+        playbackRef.current.nextPlaybackTime = audioContext.currentTime;
+        maybeReturnToListening();
       }
-      return;
-    }
-
-    void sendVoiceTurn(audioBlob);
-  }
-
-  function resetUtterance() {
-    utteranceRef.current = {
-      active: false,
-      startedAt: 0,
-      lastSpeechAt: 0,
-      loudFrames: 0,
-      peak: 0,
-    };
-    turnFramesRef.current = [];
-  }
-
-  function interruptCurrentTurn() {
-    if (assistantSpeakingRef.current) {
-      stopAssistantSpeech();
-    }
-    if (processingRef.current) {
-      abortInFlightTurn();
-    }
-  }
-
-  function abortInFlightTurn() {
-    const controller = fetchAbortRef.current;
-    if (!controller) {
-      return;
-    }
-    controller.abort();
-    fetchAbortRef.current = null;
-    processingRef.current = false;
-  }
-
-  function stopAssistantSpeech() {
-    const audio = audioReplyRef.current;
-    if (!audio) {
-      assistantSpeakingRef.current = false;
-      return;
-    }
-
-    audio.pause();
-    audio.currentTime = 0;
-    audioReplyRef.current = null;
-    assistantSpeakingRef.current = false;
-  }
-
-  async function sendVoiceTurn(audioBlob: Blob) {
-    if (!sessionActiveRef.current) {
-      return;
-    }
-
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
-    processingRef.current = true;
-    setError(null);
-    setPhaseAndStatus("processing", "Thinking...");
-
-    const formData = new FormData();
-    formData.append("audio_file", audioBlob, "turn.wav");
-    formData.append("messages", JSON.stringify(buildHistory(messagesRef.current)));
-    formData.append("voice", voice);
-    formData.append("language_hint", languageHint);
-
-    const controller = new AbortController();
-    fetchAbortRef.current = controller;
-
-    try {
-      const response = await fetch(`${API_BASE}/voice-turn`, {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
-
-      const payload = (await response.json()) as VoiceTurnResponse | ErrorResponse;
-      if (!response.ok) {
-        throw new Error(
-          isErrorResponse(payload) && payload.detail
-            ? payload.detail
-            : "Voice turn request failed."
-        );
-      }
-      if (!isVoiceTurnResponse(payload)) {
-        throw new Error("Unexpected voice response payload.");
-      }
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
-
-      processingRef.current = false;
-      if (fetchAbortRef.current === controller) {
-        fetchAbortRef.current = null;
-      }
-
-      const nextMessages = [
-        ...messagesRef.current,
-        {
-          id: crypto.randomUUID(),
-          role: "user" as const,
-          text: payload.transcript.text,
-          language: payload.transcript.language,
-          emotion: payload.transcript.emotion,
-        },
-        {
-          id: crypto.randomUUID(),
-          role: "assistant" as const,
-          text: payload.assistant.text,
-        },
-      ];
-      replaceMessages(nextMessages);
-
-      if (payload.assistant.audioDataUrl && sessionActiveRef.current) {
-        setPhaseAndStatus("speaking", "Speaking. Cut in whenever you want.");
-        await playAssistantAudio(payload.assistant.audioDataUrl);
-      }
-
-      if (
-        sessionActiveRef.current &&
-        !utteranceRef.current.active &&
-        !processingRef.current &&
-        !assistantSpeakingRef.current
-      ) {
-        setPhaseAndStatus("listening", "I'm here and listening.");
-      }
-    } catch (caughtError) {
-      processingRef.current = false;
-      if (fetchAbortRef.current === controller) {
-        fetchAbortRef.current = null;
-      }
-
-      if (isAbortError(caughtError)) {
-        if (
-          sessionActiveRef.current &&
-          !utteranceRef.current.active &&
-          !assistantSpeakingRef.current
-        ) {
-          setPhaseAndStatus("listening", "Interrupted. I’m listening again.");
-        }
-        return;
-      }
-
-      const message =
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Voice request failed.";
-      setError(message);
-      if (sessionActiveRef.current) {
-        setPhaseAndStatus("listening", "The mic is still on. Try again.");
-      }
-    }
-  }
-
-  async function playAssistantAudio(audioDataUrl: string) {
-    const audio = new Audio(audioDataUrl);
-    audioReplyRef.current = audio;
-    assistantSpeakingRef.current = true;
-
-    try {
-      await audio.play();
-    } catch (caughtError) {
-      audioReplyRef.current = null;
-      assistantSpeakingRef.current = false;
-      throw caughtError;
-    }
-
-    await new Promise<void>((resolve) => {
-      const finalize = () => {
-        audio.removeEventListener("ended", finalize);
-        audio.removeEventListener("pause", finalize);
-        audio.removeEventListener("error", finalize);
-        if (audioReplyRef.current === audio) {
-          audioReplyRef.current = null;
-        }
-        assistantSpeakingRef.current = false;
-        resolve();
-      };
-
-      audio.addEventListener("ended", finalize, { once: true });
-      audio.addEventListener("pause", finalize, { once: true });
-      audio.addEventListener("error", finalize, { once: true });
     });
+
+    source.start(scheduledAt);
+  }
+
+  function stopAssistantAudio(options?: { keepContext?: boolean }) {
+    const playback = playbackRef.current;
+    assistantAudioActiveRef.current = false;
+    responseActiveRef.current = false;
+    responseDoneRef.current = true;
+    playback.nextPlaybackTime = playback.audioContext?.currentTime ?? 0;
+
+    for (const source of playback.activeSources) {
+      try {
+        source.stop();
+      } catch {
+        // Ignore stale sources during interruption.
+      }
+      source.disconnect();
+    }
+    playback.activeSources.clear();
+
+    if (!options?.keepContext && playback.audioContext) {
+      void playback.audioContext.close();
+      playback.audioContext = null;
+    }
   }
 
   function runMeterLoop() {
@@ -584,7 +619,7 @@ export function VoiceStudio() {
       <section className="voice-chrome">
         <div className="voice-brand">
           <span className="voice-brand-mark">Pulse</span>
-          <span className="voice-brand-copy">Qwen voice mode</span>
+          <span className="voice-brand-copy">Qwen realtime voice mode</span>
         </div>
 
         <button
@@ -600,11 +635,11 @@ export function VoiceStudio() {
           <section className="voice-settings-panel">
             <div className="voice-settings-header">
               <strong>Session settings</strong>
-              <span>Auto send happens after 2 seconds of silence.</span>
+              <span>Realtime VAD sends after about 1 second of silence.</span>
             </div>
 
             <label className="voice-setting">
-              <span>ASR language hint</span>
+              <span>Preferred language</span>
               <select
                 onChange={(event) => setLanguageHint(event.target.value)}
                 value={languageHint}
@@ -618,7 +653,7 @@ export function VoiceStudio() {
             </label>
 
             <label className="voice-setting">
-              <span>TTS voice</span>
+              <span>Realtime voice</span>
               <select
                 onChange={(event) => setVoice(event.target.value)}
                 value={voice}
@@ -655,12 +690,12 @@ export function VoiceStudio() {
         <div className="voice-center">
           <div className="voice-center-copy">
             <span className="voice-center-label">
-              {phase === "idle" ? "Hands-free voice mode" : "Live voice session"}
+              {phase === "idle" ? "Hands-free realtime mode" : "Live realtime session"}
             </span>
             <h1 className="voice-status">{status}</h1>
             <p className="voice-subcopy">
-              Speak naturally. Pause for two seconds to hand the turn over. If you
-              interrupt while I am talking, I will stop and listen.
+              Speak naturally. The model listens continuously, hands over after about
+              one second of silence, and stops talking when you cut in.
             </p>
           </div>
 
@@ -670,8 +705,9 @@ export function VoiceStudio() {
             <button
               className="voice-stop-pill"
               onClick={() => {
-                stopAssistantSpeech();
-                if (sessionActiveRef.current && !utteranceRef.current.active) {
+                stopAssistantAudio({ keepContext: true });
+                sendRealtimeEvent({ type: "response.cancel" });
+                if (sessionActiveRef.current) {
                   setPhaseAndStatus("listening", "Speech stopped. I’m still listening.");
                 }
               }}
@@ -730,92 +766,68 @@ export function VoiceStudio() {
   );
 }
 
-function buildHistory(messages: TimelineMessage[]): ChatHistoryMessage[] {
-  return messages.slice(-MAX_HISTORY_ITEMS).map((message) => ({
-    role: message.role,
-    content: message.text,
-  }));
+function getRealtimeWsUrl() {
+  if (EXPLICIT_REALTIME_WS_URL) {
+    return EXPLICIT_REALTIME_WS_URL;
+  }
+
+  const origin =
+    typeof window === "undefined" ? "http://localhost:3000" : window.location.origin;
+  const url = new URL(API_BASE, origin);
+  const protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  const path = url.pathname === "/" ? "/realtime" : `${url.pathname.replace(/\/$/, "")}/realtime`;
+  return `${protocol}//${url.host}${path}`;
 }
 
-function encodeWav(frames: Float32Array[], sampleRate: number): Blob {
-  const samples = mergeFrames(frames);
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
-  const view = new DataView(buffer);
-
-  writeAscii(view, 0, "RIFF");
-  view.setUint32(4, 36 + samples.length * 2, true);
-  writeAscii(view, 8, "WAVE");
-  writeAscii(view, 12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeAscii(view, 36, "data");
-  view.setUint32(40, samples.length * 2, true);
-
-  floatTo16BitPcm(view, 44, samples);
-  return new Blob([buffer], { type: "audio/wav" });
-}
-
-function mergeFrames(frames: Float32Array[]) {
-  const totalLength = frames.reduce((sum, frame) => sum + frame.length, 0);
-  const merged = new Float32Array(totalLength);
+function float32ToPcmBase64(samples: Float32Array) {
+  const bytes = new Uint8Array(samples.length * 2);
   let offset = 0;
-  for (const frame of frames) {
-    merged.set(frame, offset);
-    offset += frame.length;
-  }
-  return merged;
-}
-
-function writeAscii(view: DataView, offset: number, value: string) {
-  for (let index = 0; index < value.length; index += 1) {
-    view.setUint8(offset + index, value.charCodeAt(index));
-  }
-}
-
-function floatTo16BitPcm(view: DataView, offset: number, samples: Float32Array) {
   for (let index = 0; index < samples.length; index += 1) {
-    const clamped = Math.max(-1, Math.min(1, samples[index] ?? 0));
-    view.setInt16(
-      offset + index * 2,
-      clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff,
-      true
-    );
+    const sample = Math.max(-1, Math.min(1, samples[index] ?? 0));
+    const value = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+    const int = Math.round(value);
+    bytes[offset] = int & 0xff;
+    bytes[offset + 1] = (int >> 8) & 0xff;
+    offset += 2;
   }
+  return bytesToBase64(bytes);
 }
 
-function calculateRms(frame: Float32Array) {
-  let total = 0;
-  for (let index = 0; index < frame.length; index += 1) {
-    const sample = frame[index] ?? 0;
-    total += sample * sample;
+function decodePcmBase64(base64Pcm: string) {
+  const bytes = base64ToBytes(base64Pcm);
+  const sampleCount = Math.floor(bytes.length / 2);
+  const samples = new Float32Array(sampleCount);
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    const low = bytes[index * 2] ?? 0;
+    const high = bytes[index * 2 + 1] ?? 0;
+    let value = (high << 8) | low;
+    if (value >= 0x8000) {
+      value -= 0x10000;
+    }
+    samples[index] = value / 0x8000;
   }
-  return Math.sqrt(total / Math.max(1, frame.length));
+
+  return samples;
 }
 
-function isErrorResponse(payload: unknown): payload is ErrorResponse {
-  return (
-    payload !== null &&
-    typeof payload === "object" &&
-    "detail" in (payload as Record<string, unknown>)
-  );
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
 }
 
-function isVoiceTurnResponse(payload: unknown): payload is VoiceTurnResponse {
-  return (
-    payload !== null &&
-    typeof payload === "object" &&
-    "transcript" in (payload as Record<string, unknown>) &&
-    "assistant" in (payload as Record<string, unknown>)
-  );
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError";
+function base64ToBytes(base64Value: string) {
+  const binary = atob(base64Value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 function SettingsIcon() {

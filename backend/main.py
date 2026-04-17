@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import contextlib
 import io
 import json
 import os
+import re
 import wave
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 import httpx
+import websockets
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -33,6 +38,13 @@ def env_first(*names: str, default: str | None = None) -> str | None:
         if value:
             return value
     return default
+
+
+def env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def normalize_dashscope_base(raw_value: str | None) -> str:
@@ -62,12 +74,22 @@ def normalize_tts_model(raw_value: str | None) -> str:
 class Settings:
     api_key: str | None
     dashscope_base_url: str
+    dashscope_ws_url: str
     chat_model: str
     chat_max_tokens: int
     chat_temperature: float
+    chat_top_p: float
+    enable_thinking: bool
     asr_model: str
     tts_model: str
     default_voice: str
+    realtime_model: str
+    realtime_default_voice: str
+    realtime_vietnamese_voice: str
+    realtime_transcription_model: str
+    realtime_vad_threshold: float
+    realtime_vad_silence_ms: int
+    realtime_vad_prefix_padding_ms: int
     system_prompt: str
     cors_origins: list[str]
 
@@ -87,20 +109,26 @@ def load_settings() -> Settings:
     dashscope_base_url = normalize_dashscope_base(
         env_first("DASHSCOPE_BASE_URL", "VITE_QWEN_API_BASE_URL")
     )
+    dashscope_ws_url = dashscope_base_url.replace("https://", "wss://").replace(
+        "http://", "ws://"
+    )
     return Settings(
         api_key=env_first("DASHSCOPE_API_KEY", "VITE_QWEN_API_KEY"),
         dashscope_base_url=dashscope_base_url,
+        dashscope_ws_url=f"{dashscope_ws_url}/api-ws/v1/realtime",
         chat_model=env_first(
             "QWEN_CHAT_MODEL",
             "VITE_QWEN_CHAT_MODEL",
             "VITE_QWEN_MODEL",
-            default="qwen3.6-plus",
+            default="qwen-flash",
         )
-        or "qwen3.6-plus",
-        chat_max_tokens=int(env_first("QWEN_CHAT_MAX_TOKENS", default="140") or "140"),
+        or "qwen-flash",
+        chat_max_tokens=int(env_first("QWEN_CHAT_MAX_TOKENS", default="110") or "110"),
         chat_temperature=float(
-            env_first("QWEN_CHAT_TEMPERATURE", default="0.35") or "0.35"
+            env_first("QWEN_CHAT_TEMPERATURE", default="0.2") or "0.2"
         ),
+        chat_top_p=float(env_first("QWEN_CHAT_TOP_P", default="0.7") or "0.7"),
+        enable_thinking=env_bool("QWEN_ENABLE_THINKING", default=False),
         asr_model=env_first("QWEN_ASR_MODEL", default="qwen3-asr-flash")
         or "qwen3-asr-flash",
         tts_model=normalize_tts_model(
@@ -116,13 +144,45 @@ def load_settings() -> Settings:
             default="Cherry",
         )
         or "Cherry",
+        realtime_model=env_first(
+            "QWEN_OMNI_REALTIME_MODEL",
+            default="qwen3.5-omni-plus-realtime",
+        )
+        or "qwen3.5-omni-plus-realtime",
+        realtime_default_voice=env_first(
+            "QWEN_OMNI_REALTIME_DEFAULT_VOICE",
+            default="Tina",
+        )
+        or "Tina",
+        realtime_vietnamese_voice=env_first(
+            "QWEN_OMNI_REALTIME_VI_VOICE",
+            default="Hana",
+        )
+        or "Hana",
+        realtime_transcription_model=env_first(
+            "QWEN_OMNI_REALTIME_TRANSCRIPTION_MODEL",
+            default="gummy-realtime-v1",
+        )
+        or "gummy-realtime-v1",
+        realtime_vad_threshold=float(
+            env_first("QWEN_OMNI_REALTIME_VAD_THRESHOLD", default="0.72") or "0.72"
+        ),
+        realtime_vad_silence_ms=int(
+            env_first("QWEN_OMNI_REALTIME_SILENCE_MS", default="1000") or "1000"
+        ),
+        realtime_vad_prefix_padding_ms=int(
+            env_first(
+                "QWEN_OMNI_REALTIME_PREFIX_PADDING_MS",
+                default="400",
+            )
+            or "400"
+        ),
         system_prompt=env_first(
             "QWEN_SYSTEM_PROMPT",
             default=(
-                "You are Pulse, a fast and natural voice assistant. "
+                "You are Pulse, a fast voice assistant. "
                 "Reply in the user's language when possible. "
-                "Keep spoken answers short, direct, and easy to hear aloud. "
-                "Default to one to three concise sentences unless the user asks for more."
+                "Keep spoken answers short, direct, and natural to hear aloud."
             ),
         )
         or "",
@@ -175,6 +235,114 @@ def guess_tts_language(language_hint: str | None) -> str | None:
     if normalized.startswith("en"):
         return "English"
     return None
+
+
+def spoken_reply_guidance(language_hint: str | None) -> str:
+    if not language_hint:
+        return ""
+    normalized = language_hint.lower()
+    if normalized.startswith("vi"):
+        return (
+            " Use natural spoken Vietnamese. Prefer short everyday wording, "
+            "avoid markdown, bullet points, abbreviations, and unnecessary English."
+        )
+    return (
+        " Keep the wording easy to hear aloud. Avoid bullet points, markdown, "
+        "and dense formatting unless the user asks for them."
+    )
+
+
+def spoken_realtime_guidance(language_hint: str | None) -> str:
+    if not language_hint or language_hint == "auto":
+        return (
+            " Reply in the language the user is speaking. Keep the answer concise, "
+            "natural, and easy to listen to."
+        )
+    normalized = language_hint.lower()
+    if normalized.startswith("vi"):
+        return (
+            " Reply in natural everyday Vietnamese with smooth spoken phrasing. "
+            "Avoid English unless the user uses it."
+        )
+    if normalized.startswith("en"):
+        return " Reply in natural spoken English."
+    if normalized.startswith("zh"):
+        return " Reply in natural spoken Chinese."
+    return (
+        f" Prefer language code `{language_hint}` when replying and keep the delivery natural."
+    )
+
+
+def normalize_text_for_speech(text: str) -> str:
+    cleaned = re.sub(r"[*#`_]+", " ", text)
+    cleaned = re.sub(r"\s*\n+\s*", " ", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip()
+
+
+def normalize_audio_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    if url.startswith("http://"):
+        return "https://" + url[len("http://") :]
+    return url
+
+
+def build_realtime_instructions(language_hint: str | None) -> str:
+    return settings.system_prompt + spoken_realtime_guidance(language_hint)
+
+
+def pick_realtime_voice(voice: str | None, language_hint: str | None) -> str:
+    if voice:
+        return voice
+    if language_hint and language_hint.lower().startswith("vi"):
+        return settings.realtime_vietnamese_voice
+    return settings.realtime_default_voice
+
+
+def build_realtime_session_config(
+    voice: str | None, language_hint: str | None
+) -> dict[str, object]:
+    return {
+        "modalities": ["text", "audio"],
+        "voice": pick_realtime_voice(voice, language_hint),
+        "instructions": build_realtime_instructions(language_hint),
+        "input_audio_format": "pcm",
+        "output_audio_format": "pcm",
+        "input_audio_transcription": {
+            "model": settings.realtime_transcription_model,
+        },
+        "turn_detection": {
+            "type": "server_vad",
+            "threshold": settings.realtime_vad_threshold,
+            "prefix_padding_ms": settings.realtime_vad_prefix_padding_ms,
+            "silence_duration_ms": settings.realtime_vad_silence_ms,
+        },
+    }
+
+
+async def send_realtime_event(
+    dashscope_ws: websockets.ClientConnection, event: dict[str, object]
+) -> None:
+    payload = {
+        "event_id": event.get("event_id") or f"event_{uuid4().hex}",
+        **event,
+    }
+    await dashscope_ws.send(json.dumps(payload))
+
+
+async def apply_realtime_session_config(
+    dashscope_ws: websockets.ClientConnection,
+    voice: str | None,
+    language_hint: str | None,
+) -> None:
+    await send_realtime_event(
+        dashscope_ws,
+        {
+            "type": "session.update",
+            "session": build_realtime_session_config(voice, language_hint),
+        },
+    )
 
 
 def pcm_to_wav(pcm_bytes: bytes, sample_rate: int = 24000) -> bytes:
@@ -244,7 +412,7 @@ async def transcribe_audio(
 async def generate_reply(
     history: list[ConversationMessage], user_text: str, language_hint: str | None
 ) -> str:
-    system_prompt = settings.system_prompt
+    system_prompt = settings.system_prompt + spoken_reply_guidance(language_hint)
     if language_hint and language_hint != "auto":
         system_prompt += (
             f" The user likely prefers language code `{language_hint}`. "
@@ -260,23 +428,21 @@ async def generate_reply(
         ],
         "temperature": settings.chat_temperature,
         "max_tokens": settings.chat_max_tokens,
-        "top_p": 0.8,
+        "top_p": settings.chat_top_p,
+        "enable_thinking": settings.enable_thinking,
     }
     data = await post_json(settings.compatible_endpoint, payload)
     choice = (data.get("choices") or [{}])[0]
     message = choice.get("message") or {}
     content = message.get("content")
     if isinstance(content, list):
-        return " ".join(str(item) for item in content if item).strip()
-    return str(content or "").strip()
+        return normalize_text_for_speech(
+            " ".join(str(item) for item in content if item).strip()
+        )
+    return normalize_text_for_speech(str(content or "").strip())
 
 
 async def synthesize_speech(text: str, voice: str, language_hint: str | None) -> dict:
-    headers = {
-        "Authorization": f"Bearer {require_api_key()}",
-        "Content-Type": "application/json",
-        "X-DashScope-SSE": "enable",
-    }
     input_payload: dict[str, str] = {
         "text": text,
         "voice": voice,
@@ -288,8 +454,31 @@ async def synthesize_speech(text: str, voice: str, language_hint: str | None) ->
     payload = {
         "model": settings.tts_model,
         "input": input_payload,
+        "parameters": {
+            "response_format": "wav",
+            "sample_rate": 24000,
+        },
     }
 
+    data = await post_json(settings.tts_stream_endpoint, payload)
+    audio = (data.get("output") or {}).get("audio") or {}
+    audio_url = normalize_audio_url(audio.get("url"))
+    if audio_url:
+        return {
+            "audioUrl": audio_url,
+            "audioDataUrl": None,
+            "audioMimeType": "audio/wav",
+        }
+
+    return await synthesize_speech_streaming(payload)
+
+
+async def synthesize_speech_streaming(payload: dict) -> dict:
+    headers = {
+        "Authorization": f"Bearer {require_api_key()}",
+        "Content-Type": "application/json",
+        "X-DashScope-SSE": "enable",
+    }
     pcm_chunks = bytearray()
     async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
         async with client.stream(
@@ -316,12 +505,14 @@ async def synthesize_speech(text: str, voice: str, language_hint: str | None) ->
 
     if not pcm_chunks:
         return {
+            "audioUrl": None,
             "audioDataUrl": None,
             "audioMimeType": None,
         }
 
     wav_bytes = pcm_to_wav(bytes(pcm_chunks))
     return {
+        "audioUrl": None,
         "audioDataUrl": (
             "data:audio/wav;base64," + base64.b64encode(wav_bytes).decode()
         ),
@@ -343,9 +534,142 @@ async def health() -> dict:
         "ok": True,
         "configured": bool(settings.api_key),
         "chatModel": settings.chat_model,
+        "thinking": settings.enable_thinking,
         "asrModel": settings.asr_model,
         "ttsModel": settings.tts_model,
+        "realtimeModel": settings.realtime_model,
+        "realtimeVoice": settings.realtime_default_voice,
     }
+
+
+@app.websocket("/realtime")
+async def realtime_proxy(websocket: WebSocket) -> None:
+    await websocket.accept()
+
+    try:
+        dashscope_ws = await websockets.connect(
+            f"{settings.dashscope_ws_url}?model={settings.realtime_model}",
+            additional_headers={
+                "Authorization": f"Bearer {require_api_key()}",
+            },
+        )
+    except Exception as exc:
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "error",
+                    "error": {
+                        "message": f"Failed to connect to realtime model: {exc}",
+                    },
+                }
+            )
+        )
+        await websocket.close(code=1011)
+        return
+
+    await apply_realtime_session_config(
+        dashscope_ws=dashscope_ws,
+        voice=None,
+        language_hint="auto",
+    )
+
+    async def client_to_dashscope() -> None:
+        while True:
+            raw_message = await websocket.receive_text()
+            try:
+                event = json.loads(raw_message)
+            except json.JSONDecodeError:
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "error": {
+                                "message": "Invalid realtime message payload.",
+                            },
+                        }
+                    )
+                )
+                continue
+
+            event_type = event.get("type")
+            if event_type == "session.configure":
+                await apply_realtime_session_config(
+                    dashscope_ws=dashscope_ws,
+                    voice=event.get("voice") if isinstance(event.get("voice"), str) else None,
+                    language_hint=(
+                        event.get("languageHint")
+                        if isinstance(event.get("languageHint"), str)
+                        else None
+                    ),
+                )
+                continue
+
+            if event_type in {
+                "input_audio_buffer.append",
+                "input_audio_buffer.clear",
+                "input_audio_buffer.commit",
+                "response.create",
+                "response.cancel",
+            }:
+                await send_realtime_event(dashscope_ws, event)
+                continue
+
+            if event_type == "session.close":
+                await websocket.close(code=1000)
+                return
+
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "error": {
+                            "message": f"Unsupported realtime event: {event_type}",
+                        },
+                    }
+                )
+            )
+
+    async def dashscope_to_client() -> None:
+        async for message in dashscope_ws:
+            await websocket.send_text(message)
+
+    client_task = asyncio.create_task(client_to_dashscope())
+    dashscope_task = asyncio.create_task(dashscope_to_client())
+
+    try:
+        done, pending = await asyncio.wait(
+            {client_task, dashscope_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in done:
+            exc = task.exception()
+            if exc is None:
+                continue
+            if isinstance(exc, WebSocketDisconnect):
+                break
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "error": {
+                            "message": str(exc),
+                        },
+                    }
+                )
+            )
+        for task in pending:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+    except WebSocketDisconnect:
+        pass
+    finally:
+        for task in (client_task, dashscope_task):
+            if not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+        await dashscope_ws.close()
 
 
 @app.post("/text-turn")

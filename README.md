@@ -5,9 +5,8 @@ Full-stack voice chat app with:
 - Next.js App Router frontend in `frontend/`
 - FastAPI backend in `backend/`
 - Browser microphone capture with Web Audio / WebRTC media devices
-- Qwen3 ASR for transcription
-- Qwen chat completions for replies
-- Qwen TTS for spoken playback
+- Qwen3.5 Omni Realtime for continuous duplex voice conversation
+- Automatic server-side VAD, interruption handling, and streaming audio playback
 - Vercel Services deployment config for one shared live URL
 
 The original Vite car-match app is still in the repo under `src/`. This new voice app is isolated so the migration is non-destructive.
@@ -28,9 +27,9 @@ Copy `.env.example` to `.env` and set at least:
 ```bash
 DASHSCOPE_API_KEY=...
 DASHSCOPE_BASE_URL=https://dashscope-intl.aliyuncs.com
-QWEN_CHAT_MODEL=qwen3.6-plus
-QWEN_ASR_MODEL=qwen3-asr-flash
-QWEN_TTS_MODEL=qwen3-tts-flash
+QWEN_OMNI_REALTIME_MODEL=qwen3.5-omni-plus-realtime
+QWEN_OMNI_REALTIME_DEFAULT_VOICE=Tina
+QWEN_OMNI_REALTIME_VI_VOICE=Hana
 ```
 
 The backend also accepts the legacy `VITE_QWEN_*` variables already present in this repo.
@@ -63,6 +62,12 @@ npm run voice:dev:web
 
 The frontend defaults to `http://localhost:3000` and expects the API at `NEXT_PUBLIC_API_BASE_URL` or `/api`.
 
+For separate frontend/backend local runs, place this in `frontend/.env.local`:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+```
+
 For a single-process Vercel-style local run after dependencies are installed:
 
 ```bash
@@ -87,8 +92,13 @@ When deployed through Services:
 - `backend/main.py` serves `/api/*`
 - the frontend automatically talks to the backend on the same domain
 
+Important:
+
+- The new realtime voice path uses a backend WebSocket relay at `/api/realtime`.
+- Vercel Functions do not support acting as a WebSocket server, so the full realtime voice mode needs a websocket-capable backend host outside Vercel.
+- The existing HTTP endpoints (`/api/text-turn` and `/api/voice-turn`) remain available as fallback paths.
+
 ## Notes
 
-- The browser records microphone audio as WAV before upload because the Qwen ASR docs explicitly show `audio/wav` and `audio/mpeg` Data URLs for the OpenAI-compatible endpoint.
-- The backend uses `qwen3-asr-flash` over the OpenAI-compatible `/chat/completions` endpoint.
-- The backend uses `qwen3-tts-flash` over the DashScope multimodal generation endpoint and repackages streamed PCM into a WAV reply for the browser.
+- The realtime mode uses `qwen3.5-omni-plus-realtime` over WebSocket and streams 16 kHz mono PCM up, then plays 24 kHz PCM chunks from the model in the browser.
+- The backend still keeps the older `/api/text-turn` and `/api/voice-turn` HTTP endpoints for fallback and non-realtime deployments.
