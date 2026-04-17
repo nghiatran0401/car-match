@@ -14,6 +14,16 @@ import { localizeVehicle } from '../lib/localizedVehicle';
 import type { UserProfile } from '../types';
 import VoiceModeOverlay from './VoiceModeOverlay';
 import { detectAssistantActions, executeAssistantAction, type AssistantAction } from '../lib/assistantActions';
+import { buildUnifiedAssistantContextSummary, inferUnifiedJourneyStage } from '../lib/unifiedSalesAssistant';
+import { evaluateActionPolicy } from '../lib/assistantPolicy';
+import { buildNegotiationStrategy } from '../lib/negotiationStrategy';
+import {
+  loadJourneyState,
+  persistJourneyState,
+  updateJourneyForAction,
+  updateJourneyForPath,
+  updateJourneyForTurn,
+} from '../lib/journeySession';
 
 interface Message {
   id: string;
@@ -48,6 +58,7 @@ export default function GlobalChatWidget() {
     return localStorage.getItem(VOICE_PANEL_OPEN_KEY) === '1';
   });
   const [pendingAction, setPendingAction] = useState<AssistantAction | null>(null);
+  const [journeyState, setJourneyState] = useState(() => loadJourneyState());
   const lastVoiceUserTranscriptRef = useRef('');
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +85,27 @@ export default function GlobalChatWidget() {
         .map(entry => localizeVehicle(entry.vehicle, language)),
     [profile, selections, language],
   );
+  const unifiedJourneyStage = useMemo(() => inferUnifiedJourneyStage(location.pathname), [location.pathname]);
+  const unifiedContextSummary = useMemo(
+    () =>
+      buildUnifiedAssistantContextSummary({
+        language,
+        pathname: location.pathname,
+        profile,
+        currentVehicle,
+        comparedVehicles,
+        shortlistVehicles,
+        recentMessages: messages.map(message => ({ role: message.role, content: message.content })),
+      }),
+    [comparedVehicles, currentVehicle, language, location.pathname, messages, profile, shortlistVehicles],
+  );
+  useEffect(() => {
+    setJourneyState(previous => updateJourneyForPath(previous, location.pathname));
+  }, [location.pathname]);
+
+  useEffect(() => {
+    persistJourneyState(journeyState);
+  }, [journeyState]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -274,10 +306,13 @@ export default function GlobalChatWidget() {
     setError('');
     trackEvent('concierge_asked', { vehicleModelSlug: currentVehicle?.modelSlug });
     try {
+      const guardrails = loadMerchantGuardrails();
       const conversation: AssistantMessage[] = [...messages, user].map(m => ({
         role: m.role,
         content: m.content,
       }));
+      const nextJourneyState = updateJourneyForTurn(journeyState, text);
+      setJourneyState(nextJourneyState);
 
       const updates = await extractProfileUpdates(conversation, {
         language,
@@ -321,8 +356,19 @@ export default function GlobalChatWidget() {
         currentVehicle,
         comparedVehicles,
         shortlistVehicles,
-        merchantGuardrails: loadMerchantGuardrails(),
-        adminPromptInstructions: loadAdminConfig().promptInstructions,
+        merchantGuardrails: guardrails,
+        adminPromptInstructions: [
+          loadAdminConfig().promptInstructions ?? '',
+          unifiedContextSummary,
+          `Current funnel stage: ${unifiedJourneyStage}`,
+          nextJourneyState.recommendedNextAction
+            ? `Next best action: ${nextJourneyState.recommendedNextAction.action} (${nextJourneyState.recommendedNextAction.reason})`
+            : '',
+          buildNegotiationStrategy(text, guardrails, language)?.message ?? '',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+        funnelStage: unifiedJourneyStage,
       });
       setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: reply }]);
       const actions = detectAssistantActions({
@@ -359,9 +405,13 @@ export default function GlobalChatWidget() {
   };
 
   const applyActionWithGuards = (action: AssistantAction) => {
-    if (action.kind === 'navigate' && (action.target === '/quote' || action.target === '/booking')) {
+    const policy = evaluateActionPolicy(action);
+    if (policy.requiresConfirmation) {
       setPendingAction(action);
-      trackEvent('assistant_action_detected', { intent: `confirmation_required:${action.target}` });
+      trackEvent('assistant_action_detected', {
+        intent: `confirmation_required:${action.kind}`,
+        confidenceScore: policy.confidence,
+      });
       return;
     }
     executeAssistantAction(action, {
@@ -371,10 +421,12 @@ export default function GlobalChatWidget() {
       toggleCompare: toggleVehicle,
       isInCompare,
     });
+    setJourneyState(previous => updateJourneyForAction(previous, action));
   };
 
   const confirmPendingAction = () => {
     if (!pendingAction) return;
+    trackEvent('assistant_action_confirmed', { intent: pendingAction.kind });
     executeAssistantAction(pendingAction, {
       navigate,
       updateProfile,
@@ -382,12 +434,14 @@ export default function GlobalChatWidget() {
       toggleCompare: toggleVehicle,
       isInCompare,
     });
+    setJourneyState(previous => updateJourneyForAction(previous, pendingAction));
     setPendingAction(null);
   };
 
   const rejectPendingAction = () => {
     if (!pendingAction) return;
     trackEvent('assistant_action_rejected', { intent: pendingAction.kind });
+    trackEvent('assistant_action_declined', { intent: pendingAction.kind });
     setPendingAction(null);
   };
 
@@ -400,6 +454,12 @@ export default function GlobalChatWidget() {
           {currentVehicle ? <p className="mt-1 text-xs text-slate-500">{currentVehicle.name}</p> : null}
         </div>
       </header>
+      {journeyState.recommendedNextAction ? (
+        <div className="border-b border-slate-100 bg-emerald-50/70 px-3 py-2 text-[11px] text-emerald-900">
+          <span className="font-semibold">{t({ vi: 'Bước gợi ý tiếp theo', en: 'Next best step' })}: </span>
+          {journeyState.recommendedNextAction.reason}
+        </div>
+      ) : null}
       {aiRecommendationControls?.source === 'ai-copilot' ? (
         <div className="border-b border-slate-100 bg-cyan-50/70 px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
@@ -482,7 +542,9 @@ export default function GlobalChatWidget() {
             <p className="mt-1">
               {pendingAction.target === '/quote'
                 ? t({ vi: 'Đi tới trang báo giá ngay?', en: 'Go to quote page now?' })
-                : t({ vi: 'Đi tới trang đặt lịch ngay?', en: 'Go to booking page now?' })}
+                : pendingAction.target === '/booking'
+                  ? t({ vi: 'Đi tới trang đặt lịch ngay?', en: 'Go to booking page now?' })
+                  : t({ vi: 'Thực hiện điều hướng này ngay?', en: 'Proceed with this navigation now?' })}
             </p>
             <div className="mt-2 flex gap-2">
               <button
@@ -536,10 +598,10 @@ export default function GlobalChatWidget() {
       </form>
       <VoiceModeOverlay
         open={voiceOpen}
-        onOpen={() => setVoiceOpen(true)}
         onClose={() => setVoiceOpen(false)}
         onUserTranscript={handleVoiceUserTranscript}
         onAssistantTranscript={handleVoiceAssistantTranscript}
+        contextSummary={unifiedContextSummary}
       />
     </section>
   );

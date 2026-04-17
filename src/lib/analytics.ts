@@ -38,6 +38,8 @@ export type AnalyticsEventName =
   | 'assistant_action_detected'
   | 'assistant_action_executed'
   | 'assistant_action_rejected'
+  | 'assistant_action_confirmed'
+  | 'assistant_action_declined'
   | 'assistant_action_failed'
   
   // AI Agent Events (Phase 0 - Optimization Plan)

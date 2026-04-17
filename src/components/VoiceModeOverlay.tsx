@@ -35,10 +35,10 @@ type RealtimeEvent = {
 
 interface VoiceModeOverlayProps {
   open: boolean;
-  onOpen: () => void;
   onClose: () => void;
   onUserTranscript?: (text: string) => void;
   onAssistantTranscript?: (text: string) => void;
+  contextSummary?: string;
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
@@ -55,7 +55,13 @@ const INITIAL_METER = new Array(18).fill(0.08);
 const OUTPUT_SAMPLE_RATE = 24000;
 const VOICE_RESUME_KEY = 'carmatch-voice-resume-active';
 
-export default function VoiceModeOverlay({ open, onOpen, onClose, onUserTranscript, onAssistantTranscript }: VoiceModeOverlayProps) {
+export default function VoiceModeOverlay({
+  open,
+  onClose,
+  onUserTranscript,
+  onAssistantTranscript,
+  contextSummary,
+}: VoiceModeOverlayProps) {
   const { language, t } = useLanguage();
   const [messages, setMessages] = useState<TimelineMessage[]>(() => [{ id: crypto.randomUUID(), role: 'assistant', text: '' }]);
   const [phase, setPhase] = useState<SessionPhase>('idle');
@@ -149,8 +155,8 @@ export default function VoiceModeOverlay({ open, onOpen, onClose, onUserTranscri
 
   useEffect(() => {
     if (!sessionActiveRef.current || !realtimeReadyRef.current) return;
-    sendRealtimeEvent({ type: 'session.configure', voice, languageHint });
-  }, [languageHint, voice]);
+    sendRealtimeEvent({ type: 'session.configure', voice, languageHint, contextSummary });
+  }, [contextSummary, languageHint, voice]);
 
   function setPhaseAndStatus(nextPhase: SessionPhase, nextStatus: string) {
     phaseRef.current = nextPhase;
@@ -289,7 +295,7 @@ export default function VoiceModeOverlay({ open, onOpen, onClose, onUserTranscri
     socket.addEventListener('open', () => {
       setError(null);
       lastRealtimeErrorRef.current = null;
-      sendRealtimeEvent({ type: 'session.configure', voice, languageHint });
+      sendRealtimeEvent({ type: 'session.configure', voice, languageHint, contextSummary });
     });
     socket.addEventListener('message', message => {
       try {

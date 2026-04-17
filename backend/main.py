@@ -288,8 +288,21 @@ def normalize_audio_url(url: str | None) -> str | None:
     return url
 
 
-def build_realtime_instructions(language_hint: str | None) -> str:
-    return settings.system_prompt + spoken_realtime_guidance(language_hint)
+def build_realtime_instructions(
+    language_hint: str | None, context_summary: str | None
+) -> str:
+    base = settings.system_prompt + spoken_realtime_guidance(language_hint)
+    if not context_summary:
+        return base
+    trimmed_summary = context_summary.strip()
+    if not trimmed_summary:
+        return base
+    return (
+        f"{base}\n\n"
+        "Use this shared CarMatch context so voice mode behaves like the same "
+        "sales assistant used in chat mode.\n"
+        f"{trimmed_summary}"
+    )
 
 
 def pick_realtime_voice(voice: str | None, language_hint: str | None) -> str:
@@ -301,12 +314,12 @@ def pick_realtime_voice(voice: str | None, language_hint: str | None) -> str:
 
 
 def build_realtime_session_config(
-    voice: str | None, language_hint: str | None
+    voice: str | None, language_hint: str | None, context_summary: str | None
 ) -> dict[str, object]:
     return {
         "modalities": ["text", "audio"],
         "voice": pick_realtime_voice(voice, language_hint),
-        "instructions": build_realtime_instructions(language_hint),
+        "instructions": build_realtime_instructions(language_hint, context_summary),
         "input_audio_format": "pcm",
         "output_audio_format": "pcm",
         "input_audio_transcription": {
@@ -335,12 +348,15 @@ async def apply_realtime_session_config(
     dashscope_ws: websockets.ClientConnection,
     voice: str | None,
     language_hint: str | None,
+    context_summary: str | None,
 ) -> None:
     await send_realtime_event(
         dashscope_ws,
         {
             "type": "session.update",
-            "session": build_realtime_session_config(voice, language_hint),
+            "session": build_realtime_session_config(
+                voice, language_hint, context_summary
+            ),
         },
     )
 
@@ -571,6 +587,7 @@ async def realtime_proxy(websocket: WebSocket) -> None:
         dashscope_ws=dashscope_ws,
         voice=None,
         language_hint="auto",
+        context_summary=None,
     )
 
     async def client_to_dashscope() -> None:
@@ -599,6 +616,11 @@ async def realtime_proxy(websocket: WebSocket) -> None:
                     language_hint=(
                         event.get("languageHint")
                         if isinstance(event.get("languageHint"), str)
+                        else None
+                    ),
+                    context_summary=(
+                        event.get("contextSummary")
+                        if isinstance(event.get("contextSummary"), str)
                         else None
                     ),
                 )

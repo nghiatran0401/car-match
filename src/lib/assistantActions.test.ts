@@ -1,6 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { detectAssistantActions } from './assistantActions';
 import { vehicles } from '../data/vehicles';
+
+beforeAll(() => {
+  const storage = new Map<string, string>();
+  const sessionStorageMock = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      storage.set(key, value);
+    },
+    removeItem: (key: string) => {
+      storage.delete(key);
+    },
+    clear: () => {
+      storage.clear();
+    },
+  };
+  Object.defineProperty(globalThis, 'sessionStorage', {
+    value: sessionStorageMock,
+    configurable: true,
+  });
+});
 
 describe('detectAssistantActions', () => {
   it('detects compare + specific model actions', () => {

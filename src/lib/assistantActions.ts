@@ -8,6 +8,7 @@ type SortBy = NonNullable<AIRecommendationControls['sortBy']>;
 type VehicleTypeFilter = NonNullable<AIRecommendationControls['vehicleTypeFilter']>;
 type PowertrainFilter = NonNullable<AIRecommendationControls['powertrainFilter']>;
 type BudgetBand = NonNullable<AIRecommendationControls['budgetBand']>;
+type NavigateTarget = Extract<AssistantAction, { kind: 'navigate' }>['target'];
 
 export type AssistantAction =
   | { kind: 'navigate'; target: '/' | '/profile' | '/recommendations' | '/cars' | '/compare' | '/quote' | '/booking' | '/showrooms' | '/concierge' }
@@ -97,7 +98,7 @@ function inferBudgetBand(text: string): BudgetBand | undefined {
   return undefined;
 }
 
-function inferNavigation(text: string): AssistantAction['target'] | undefined {
+function inferNavigation(text: string): NavigateTarget | undefined {
   if (text.includes('so sanh') || text.includes('compare')) return '/compare';
   if (text.includes('bao gia') || text.includes('quote')) return '/quote';
   if (text.includes('dat lich') || text.includes('booking') || text.includes('test drive')) return '/booking';

@@ -8,6 +8,7 @@ Full-stack car recommendation app with realtime voice mode:
 - Qwen3.5 Omni Realtime websocket voice conversation
 - Vercel hosting for web app
 - Fly.io hosting for websocket-capable realtime backend
+- Unified "Pulse" salesperson logic shared by chat + voice
 
 ## Voice Mode Entry Points
 
@@ -20,6 +21,17 @@ The Vite app now includes a Perplexity-style voice mode entry point inside all A
 When users tap the mic icon, a full voice overlay opens and they can talk to the AI hands-free with continuous realtime turn detection and streamed voice responses.
 
 Voice mode connects to backend realtime websocket at `/realtime` (or explicit `VITE_REALTIME_WS_URL` when configured).
+
+## Unified AI Salesperson
+
+Chat mode and voice mode now share one sales-assistant context model:
+
+- single salesperson persona (`Pulse`)
+- shared journey stage and next-best-action guidance
+- shared action policy (confirmation for high-intent actions like quote/booking)
+- shared negotiation guidance constrained by merchant guardrails
+
+This keeps behavior consistent when users switch between typing and speaking.
 
 ## Project Layout
 
@@ -51,6 +63,7 @@ Frontend (`src/`) variables:
 VITE_QWEN_API_KEY=...
 VITE_QWEN_API_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 VITE_QWEN_MODEL=qwen-flash
+VITE_API_BASE_URL=/api
 # local only
 VITE_REALTIME_WS_URL=ws://127.0.0.1:8000/realtime
 ```
