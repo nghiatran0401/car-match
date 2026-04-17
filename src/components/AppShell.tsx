@@ -89,7 +89,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
             : 'pb-[calc(6.4rem+env(safe-area-inset-bottom))] md:pb-6',
         )}
       >
-        {children}
+        <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_370px] lg:gap-5">
+          <section className="min-w-0">{children}</section>
+          <aside className="hidden lg:block">
+            <div className="sticky top-[84px]">
+              <GlobalChatWidget />
+            </div>
+          </aside>
+        </div>
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
@@ -112,7 +119,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </NavLink>
         </div>
       </nav>
-      <GlobalChatWidget />
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, X, Send, Mic } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { useCompare } from '../context/CompareContext';
 import { vehicles } from '../data/vehicles';
@@ -9,68 +8,19 @@ import { getVehicleImage, getVehicleImageSources } from '../lib/vehicleMedia';
 import { trackEvent } from '../lib/analytics';
 import { useLanguage } from '../context/LanguageContext';
 import { localizeVehicle } from '../lib/localizedVehicle';
-import { askQwenAssistant, extractProfileUpdates, type AssistantMessage, type ProfileUpdateSuggestion } from '../lib/aiAssistant';
-import { loadMerchantGuardrails } from '../lib/merchantGuardrails';
-import { loadAdminConfig } from '../lib/adminConfig';
 import VehicleImage from '../components/VehicleImage';
-import VoiceModeOverlay from '../components/VoiceModeOverlay';
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-const starterPrompts = {
-  vi: [
-    'Mẫu nào phù hợp nhất với tôi?',
-    'So sánh các xe đang xem giúp tôi',
-    'Tôi nên chốt xe nào?',
-  ],
-  en: [
-    'Which model fits me best?',
-    'Compare the cars I am viewing',
-    'Which one should I pick?',
-  ],
-};
 
 export default function RecommendationsPage() {
   const { language, t } = useLanguage();
-  const { profile, isHydrated, selections, updateProfile } = useProfile();
-  const { toggleVehicle, isInCompare, count, vehicleIds } = useCompare();
+  const { profile, isHydrated, selections } = useProfile();
+  const { toggleVehicle, isInCompare, count } = useCompare();
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<'best-match' | 'price-low' | 'price-high' | 'name-az'>('best-match');
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<'all' | 'sedan' | 'suv' | 'crossover' | 'hatchback'>('all');
   const [powertrainFilter, setPowertrainFilter] = useState<'all' | 'ice' | 'hybrid' | 'phev' | 'ev'>('all');
 
-  // Chat state
-  const [chatOpen, setChatOpen] = useState(true);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatError, setChatError] = useState('');
-  const [voiceOpen, setVoiceOpen] = useState(false);
-  const [profileUpdates, setProfileUpdates] = useState<ProfileUpdateSuggestion[]>([]);
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
-
-  const comparedVehicles = useMemo(
-    () =>
-      vehicleIds
-        .map(id => vehicles.find(v => v.id === id))
-        .filter((v): v is NonNullable<typeof v> => Boolean(v))
-        .map(v => localizeVehicle(v, language)),
-    [vehicleIds, language],
-  );
-
-  const shortlistVehicles = useMemo(
-    () =>
-      rankAndSort(vehicles, profile, selections, language)
-        .slice(0, 3)
-        .map(entry => localizeVehicle(entry.vehicle, language)),
-    [profile, selections, language],
-  );
 
   const shortlist = useMemo(() => {
     let ranked = rankAndSort(vehicles, profile, selections, language).map(item => ({
@@ -118,85 +68,19 @@ export default function RecommendationsPage() {
     if (isHydrated) trackEvent('shortlist_viewed');
   }, [isHydrated]);
 
-  useEffect(() => {
-    if (!chatOpen) return;
-    // Only scroll when there are messages or loading, not on initial mount
-    if (messages.length === 0 && !chatLoading) return;
-    
-    // Always scroll to show latest message in chat
-    // Use requestAnimationFrame to ensure DOM has updated
-    const frameId = requestAnimationFrame(() => {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    });
-    return () => cancelAnimationFrame(frameId);
-  }, [messages, chatLoading, chatOpen]);
-
   // Scroll to top of recommendations when profile changes
   useEffect(() => {
-    if (profileUpdates.length > 0 && mainContentRef.current) {
-      // Calculate position and scroll to top of main content
-      const yOffset = -80; // Offset for header
+    if (mainContentRef.current) {
+      const yOffset = -80;
       const element = mainContentRef.current;
       const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
-      
       window.scrollTo({ top: y, behavior: 'smooth' });
-      
       setShowUpdateIndicator(true);
-      // Hide indicator after 3 seconds
       const timer = setTimeout(() => setShowUpdateIndicator(false), 3000);
       return () => clearTimeout(timer);
     }
-  }, [profileUpdates]);
-
-  const sendChatMessage = async (text: string): Promise<void> => {
-    if (!text.trim() || chatLoading) return;
-    const user: ChatMessage = { id: `u-${Date.now()}`, role: 'user', content: text.trim() };
-    setMessages(prev => [...prev, user]);
-    setChatInput('');
-    setChatLoading(true);
-    setChatError('');
-    setProfileUpdates([]);
-    trackEvent('concierge_asked');
-    try {
-      const conversation: AssistantMessage[] = [...messages, user].map(m => ({
-        role: m.role,
-        content: m.content,
-      }));
-      
-      // Extract profile updates from user's message
-      const updates = await extractProfileUpdates(conversation, {
-        language,
-        profile,
-        comparedVehicles,
-        shortlistVehicles,
-      });
-      
-      if (updates.length > 0) {
-        setProfileUpdates(updates);
-        // Apply profile updates
-        const profilePatch: Record<string, string | string[]> = {};
-        updates.forEach(u => {
-          profilePatch[u.field] = u.value;
-        });
-        updateProfile(profilePatch);
-      }
-      
-      const reply = await askQwenAssistant(conversation, {
-        language,
-        profile,
-        comparedVehicles,
-        shortlistVehicles,
-        merchantGuardrails: loadMerchantGuardrails(),
-        adminPromptInstructions: loadAdminConfig().promptInstructions,
-      });
-      setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: reply }]);
-      trackEvent('concierge_replied');
-    } catch (err) {
-      setChatError(err instanceof Error ? err.message : t({ vi: 'Yêu cầu thất bại.', en: 'Request failed.' }));
-    } finally {
-      setChatLoading(false);
-    }
-  };
+    return undefined;
+  }, [profile, selections]);
 
   if (!isHydrated) {
     return (
@@ -207,114 +91,7 @@ export default function RecommendationsPage() {
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-      {/* Chat Box Sidebar */}
-      <aside className="surface flex h-[600px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 xl:sticky xl:top-24">
-        <header className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <MessageCircle className="h-5 w-5 text-slate-700" />
-            <div>
-              <p className="text-sm font-semibold text-slate-900">{t({ vi: 'Trợ lý CarMatch', en: 'CarMatch Assistant' })}</p>
-              <p className="text-xs text-slate-500">{t({ vi: 'Hỏi đáp về xe', en: 'Ask about vehicles' })}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setChatOpen(!chatOpen)}
-            className="rounded-full p-1.5 text-slate-500 hover:bg-slate-200"
-          >
-            {chatOpen ? <X className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
-          </button>
-        </header>
-
-        {chatOpen && (
-          <>
-            <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-3">
-              {messages.length === 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500">{t({ vi: 'Gợi ý nhanh:', en: 'Quick prompts:' })}</p>
-                  {starterPrompts[language].map(prompt => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => void sendChatMessage(prompt)}
-                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-left text-xs text-slate-700 transition hover:bg-slate-50"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                messages.map(message => (
-                  <div
-                    key={message.id}
-                    className={
-                      message.role === 'user'
-                        ? 'ml-6 rounded-xl bg-slate-900 px-3 py-2 text-sm text-white'
-                        : 'mr-6 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700'
-                    }
-                  >
-                    {message.content}
-                  </div>
-                ))
-              )}
-              {chatLoading && (
-                <p className="text-xs text-slate-500">{t({ vi: 'Đang trả lời...', en: 'Thinking...' })}</p>
-              )}
-              {chatError && <p className="text-xs text-red-600">{chatError}</p>}
-              
-              {/* Profile Updates Notification */}
-              {profileUpdates.length > 0 && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                  <p className="text-xs font-semibold text-emerald-700">
-                    {t({ vi: 'Đã cập nhật hồ sơ:', en: 'Profile updated:' })}
-                  </p>
-                  {profileUpdates.map((u, i) => (
-                    <p key={i} className="text-xs text-emerald-600">
-                      • {u.reason}
-                    </p>
-                  ))}
-                </div>
-              )}
-              
-              <div ref={chatEndRef} />
-            </div>
-
-            <form
-              onSubmit={e => {
-                e.preventDefault();
-                void sendChatMessage(chatInput);
-              }}
-              className="border-t border-slate-100 bg-white p-3"
-            >
-              <div className="flex items-center gap-2">
-                <input
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  placeholder={t({ vi: 'Đặt câu hỏi...', en: 'Ask anything...' })}
-                  className="input-base mt-0 min-h-[40px] flex-1 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setVoiceOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                  aria-label={t({ vi: 'Mo voice mode', en: 'Open voice mode' })}
-                >
-                  <Mic className="h-4 w-4" />
-                </button>
-                <button
-                  type="submit"
-                  disabled={!chatInput.trim() || chatLoading}
-                  className="btn-primary flex h-10 w-10 items-center justify-center rounded-full p-0 disabled:bg-slate-300"
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              </div>
-            </form>
-          </>
-        )}
-      </aside>
-
+    <div>
       <main ref={mainContentRef} className="surface relative p-4 sm:p-5">
         {/* Update Indicator Banner */}
         {showUpdateIndicator && (
@@ -479,7 +256,6 @@ export default function RecommendationsPage() {
           </Link>
         </div>
       ) : null}
-      <VoiceModeOverlay open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   );
 }

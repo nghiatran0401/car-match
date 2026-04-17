@@ -1,33 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Mic } from 'lucide-react';
 import { vehicles } from '../data/vehicles';
 import { getVehicleGallery, getVehicleImageSources } from '../lib/vehicleMedia';
 import { buildSpecSections } from '../lib/specSectionsForVehicle';
 import { useCompare } from '../context/CompareContext';
 import { trackEvent } from '../lib/analytics';
 import { variantPriceMilVnd, variantsForVehicle } from '../lib/vehicleVariants';
-import { askQwenAssistant, type AssistantMessage } from '../lib/aiAssistant';
-import { useProfile } from '../context/ProfileContext';
-import { rankAndSort } from '../lib/recommendationScore';
-import {
-  defaultMerchantGuardrails,
-  loadMerchantGuardrails,
-  saveMerchantGuardrails,
-} from '../lib/merchantGuardrails';
-import { loadAdminConfig } from '../lib/adminConfig';
-import type { MerchantDealGuardrails } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { localizeVehicle } from '../lib/localizedVehicle';
 import VehicleImage from '../components/VehicleImage';
 import InteractiveSpecItem, { type SpecContext } from '../components/InteractiveSpecItem';
-import VoiceModeOverlay from '../components/VoiceModeOverlay';
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-}
 
 function estimateMonthlyVnd(priceMil: number, downPct: number, term: number, apr: number): number {
   const principal = priceMil * 1_000_000 * (1 - downPct / 100);
@@ -41,19 +23,11 @@ export default function VehicleDetailPage() {
   const { language, t } = useLanguage();
   const { modelSlug } = useParams();
   const { isInCompare, toggleVehicle } = useCompare();
-  const { profile, selections } = useProfile();
   const [imgIdx, setImgIdx] = useState(0);
   const [downPct, setDownPct] = useState(15);
   const [term, setTerm] = useState(60);
   const [apr, setApr] = useState(9.5);
   const [variantKey, setVariantKey] = useState('core');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatError, setChatError] = useState('');
-  const [voiceOpen, setVoiceOpen] = useState(false);
-  const [guardrailsOpen, setGuardrailsOpen] = useState(false);
-  const [guardrails, setGuardrails] = useState<MerchantDealGuardrails>(defaultMerchantGuardrails);
 
   const vehicle = useMemo(
     () => localizeVehicle(vehicles.find(v => v.modelSlug === modelSlug) ?? vehicles[0], language),
@@ -62,13 +36,6 @@ export default function VehicleDetailPage() {
   const gallery = useMemo(() => getVehicleGallery(vehicle.modelSlug), [vehicle.modelSlug]);
   const sections = useMemo(() => buildSpecSections(vehicle, language), [language, vehicle]);
   const variants = useMemo(() => variantsForVehicle(vehicles.find(v => v.modelSlug === modelSlug) ?? vehicles[0]), [modelSlug]);
-  const shortlistVehicles = useMemo(
-    () =>
-      rankAndSort(vehicles, profile, selections, language)
-        .slice(0, 3)
-        .map(entry => localizeVehicle(entry.vehicle, language)),
-    [profile, selections, language],
-  );
   const effectivePriceMil = variantPriceMilVnd(vehicles.find(v => v.modelSlug === modelSlug) ?? vehicles[0], variantKey);
   const monthly = estimateMonthlyVnd(effectivePriceMil, downPct, term, apr);
 
@@ -80,89 +47,12 @@ export default function VehicleDetailPage() {
     setVariantKey(variants[0]?.key ?? 'core');
   }, [variants]);
 
-  useEffect(() => {
-    setChatMessages([]);
-    setChatInput('');
-    setChatError('');
-  }, [vehicle.modelSlug]);
-
-  useEffect(() => {
-    setGuardrails(loadMerchantGuardrails());
-  }, []);
-
-  const vehiclePrompts = useMemo(
-    () =>
-      language === 'vi'
-        ? [
-            `Tôi nên mua ${vehicle.name} ngay hay chờ thêm 3-6 tháng?`,
-            `Hãy cho tôi kế hoạch đàm phán cho ${vehicle.name} theo ngân sách hiện tại.`,
-            `Điểm mạnh lớn nhất và điểm đánh đổi của ${vehicle.name} với hồ sơ của tôi là gì?`,
-          ]
-        : [
-            `Should I buy ${vehicle.name} now or wait 3-6 months?`,
-            `Give me a negotiation plan for ${vehicle.name} in my budget.`,
-            `What are the biggest pros and trade-offs of ${vehicle.name} for my profile?`,
-          ],
-    [language, vehicle.name],
-  );
-
   const handleSpecClick = useCallback(
     (ctx: SpecContext) => {
-      const q =
-        language === 'vi'
-          ? `Hãy giải thích về "${ctx.label}: ${ctx.value}" trên ${vehicle.name}.`
-          : `Please explain "${ctx.label}: ${ctx.value}" on the ${vehicle.name}.`;
-      setChatInput(q);
-      document.getElementById('vehicle-ai-chat')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      void ctx;
     },
-    [language, vehicle.name],
+    [],
   );
-
-  const sendVehicleChat = async (text: string) => {
-    if (!text.trim() || chatLoading) return;
-    const user: ChatMessage = {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      content: text.trim(),
-    };
-    setChatMessages(prev => [...prev, user]);
-    setChatInput('');
-    setChatLoading(true);
-    setChatError('');
-    trackEvent('concierge_asked', { vehicleModelSlug: vehicle.modelSlug });
-    try {
-      const conversation: AssistantMessage[] = [...chatMessages, user].map(m => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const reply = await askQwenAssistant(conversation, {
-        language,
-        profile,
-        currentVehicle: vehicle,
-        shortlistVehicles,
-        merchantGuardrails: guardrails,
-        adminPromptInstructions: loadAdminConfig().promptInstructions,
-      });
-      setChatMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: reply }]);
-      trackEvent('concierge_replied', { vehicleModelSlug: vehicle.modelSlug });
-    } catch (err) {
-      setChatMessages(prev => [
-        ...prev,
-        {
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content:
-            t({
-              vi: 'Hiện chưa kết nối được trợ lý trực tuyến. Vui lòng kiểm tra cấu hình API rồi thử lại. Bạn vẫn có thể tiếp tục qua báo giá/thông số/showroom.',
-              en: 'I could not reach the live assistant right now. Please verify API configuration and retry. I can still help via quote/specs/showroom actions.',
-            }),
-        },
-      ]);
-      setChatError(err instanceof Error ? err.message : t({ vi: 'Yêu cầu trợ lý thất bại.', en: 'Assistant request failed.' }));
-    } finally {
-      setChatLoading(false);
-    }
-  };
 
   return (
     <div className="space-y-5">
@@ -193,7 +83,7 @@ export default function VehicleDetailPage() {
       </section>
 
       <section className="surface p-4 sm:p-5">
-        <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr_0.85fr]">
+        <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <div>
             <VehicleImage
               src={gallery[imgIdx]}
@@ -275,186 +165,16 @@ export default function VehicleDetailPage() {
                 {t({ vi: 'Lên lịch ghé showroom', en: 'Plan showroom visit' })}
               </Link>
             </div>
-          </div>
-
-          <aside id="vehicle-ai-chat" className="surface-muted flex h-[520px] min-h-[520px] flex-col overflow-hidden p-3 sm:p-4">
-            <div className="mb-2">
-              <p className="kicker">{t({ vi: 'AI đồng hành', en: 'AI copilot' })}</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">
-                {t({ vi: 'Tư vấn trực tiếp khi bạn đang xem xe', en: 'Live advice while you review this car' })}
+            <div className="surface-muted mt-4 p-4">
+              <p className="text-sm font-semibold text-slate-900">{t({ vi: 'AI Co-pilot', en: 'AI Co-pilot' })}</p>
+              <p className="mt-1 text-sm text-slate-600">
+                {t({
+                  vi: 'Khung chat đã được hợp nhất sang panel cố định bên phải. Bạn có thể hỏi về mẫu xe này bằng cả text và voice ngay tại đó.',
+                  en: 'Chat has been unified into the fixed right-side panel. Ask about this car there using text or voice.',
+                })}
               </p>
-              <button
-                type="button"
-                onClick={() => setGuardrailsOpen(v => !v)}
-                className="mt-2 text-xs font-semibold text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
-              >
-                {guardrailsOpen
-                  ? t({ vi: 'Ẩn giới hạn chính sách', en: 'Hide merchant guardrails' })
-                  : t({ vi: 'Thiết lập giới hạn chính sách', en: 'Set merchant guardrails' })}
-              </button>
-              {guardrailsOpen ? (
-                <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-white p-2.5">
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-[11px] font-semibold text-slate-600">
-                      {t({ vi: 'Giảm giá tối thiểu %', en: 'Discount min %' })}
-                      <input
-                        type="number"
-                        value={guardrails.discountMinPct}
-                        min={0}
-                        max={40}
-                        onChange={e =>
-                          setGuardrails(prev => ({ ...prev, discountMinPct: Number(e.target.value) || 0 }))
-                        }
-                        className="input-base mt-1 min-h-[34px] px-2 text-xs"
-                      />
-                    </label>
-                    <label className="text-[11px] font-semibold text-slate-600">
-                      {t({ vi: 'Giảm giá tối đa %', en: 'Discount max %' })}
-                      <input
-                        type="number"
-                        value={guardrails.discountMaxPct}
-                        min={0}
-                        max={40}
-                        onChange={e =>
-                          setGuardrails(prev => ({ ...prev, discountMaxPct: Number(e.target.value) || 0 }))
-                        }
-                        className="input-base mt-1 min-h-[34px] px-2 text-xs"
-                      />
-                    </label>
-                    <label className="text-[11px] font-semibold text-slate-600">
-                      {t({ vi: 'APR tối thiểu %', en: 'APR min %' })}
-                      <input
-                        type="number"
-                        step={0.1}
-                        value={guardrails.aprMinPct}
-                        min={0}
-                        max={30}
-                        onChange={e => setGuardrails(prev => ({ ...prev, aprMinPct: Number(e.target.value) || 0 }))}
-                        className="input-base mt-1 min-h-[34px] px-2 text-xs"
-                      />
-                    </label>
-                    <label className="text-[11px] font-semibold text-slate-600">
-                      {t({ vi: 'APR tối đa %', en: 'APR max %' })}
-                      <input
-                        type="number"
-                        step={0.1}
-                        value={guardrails.aprMaxPct}
-                        min={0}
-                        max={30}
-                        onChange={e => setGuardrails(prev => ({ ...prev, aprMaxPct: Number(e.target.value) || 0 }))}
-                        className="input-base mt-1 min-h-[34px] px-2 text-xs"
-                      />
-                    </label>
-                    <label className="text-[11px] font-semibold text-slate-600">
-                      {t({ vi: 'Đặt cọc tối thiểu %', en: 'Deposit min %' })}
-                      <input
-                        type="number"
-                        value={guardrails.minDepositPct}
-                        min={0}
-                        max={80}
-                        onChange={e =>
-                          setGuardrails(prev => ({ ...prev, minDepositPct: Number(e.target.value) || 0 }))
-                        }
-                        className="input-base mt-1 min-h-[34px] px-2 text-xs"
-                      />
-                    </label>
-                    <label className="text-[11px] font-semibold text-slate-600">
-                      {t({ vi: 'Đặt cọc tối đa %', en: 'Deposit max %' })}
-                      <input
-                        type="number"
-                        value={guardrails.maxDepositPct}
-                        min={0}
-                        max={80}
-                        onChange={e =>
-                          setGuardrails(prev => ({ ...prev, maxDepositPct: Number(e.target.value) || 0 }))
-                        }
-                        className="input-base mt-1 min-h-[34px] px-2 text-xs"
-                      />
-                    </label>
-                  </div>
-                  <label className="block text-[11px] font-semibold text-slate-600">
-                    {t({ vi: 'Ưu đãi cho phép (phân tách bằng dấu phẩy)', en: 'Allowed perks (comma separated)' })}
-                    <input
-                      type="text"
-                      value={guardrails.allowedPerks.join(', ')}
-                      onChange={e =>
-                        setGuardrails(prev => ({
-                          ...prev,
-                          allowedPerks: e.target.value
-                            .split(',')
-                            .map(x => x.trim())
-                            .filter(Boolean),
-                        }))
-                      }
-                      className="input-base mt-1 min-h-[34px] px-2 text-xs"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => saveMerchantGuardrails(guardrails)}
-                    className="btn-primary px-3 py-1.5 text-xs"
-                  >
-                    {t({ vi: 'Lưu giới hạn chính sách', en: 'Save guardrails' })}
-                  </button>
-                </div>
-              ) : null}
             </div>
-            <div className="flex-1 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2.5">
-              {chatMessages.length === 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500">{t({ vi: 'Thử một câu hỏi:', en: 'Try one:' })}</p>
-                  {vehiclePrompts.map(prompt => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => sendVehicleChat(prompt)}
-                      className="w-full rounded-lg border border-slate-200 bg-white p-2 text-left text-xs text-slate-700 hover:bg-slate-50"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                chatMessages.map(message => (
-                  <div
-                    key={message.id}
-                    className={message.role === 'user'
-                      ? 'ml-8 rounded-xl bg-slate-900 px-3 py-2 text-sm leading-5 text-white whitespace-pre-wrap break-words'
-                      : 'mr-8 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-5 text-slate-700 whitespace-pre-wrap break-words'}
-                  >
-                    {message.content}
-                  </div>
-                ))
-              )}
-              {chatLoading ? <p className="text-xs text-slate-500">{t({ vi: 'AI đang phân tích...', en: 'AI is thinking...' })}</p> : null}
-              {chatError ? <p className="text-xs text-amber-700">{chatError}</p> : null}
-            </div>
-            <form
-              onSubmit={e => {
-                e.preventDefault();
-                void sendVehicleChat(chatInput);
-              }}
-              className="mt-2 flex gap-2"
-            >
-              <input
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                placeholder={t({ vi: `Hỏi về ${vehicle.name}...`, en: `Ask about ${vehicle.name}...` })}
-                className="input-base mt-0 min-h-[40px] text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => setVoiceOpen(true)}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                aria-label={t({ vi: 'Mo voice mode', en: 'Open voice mode' })}
-              >
-                <Mic className="h-4 w-4" />
-              </button>
-              <button type="submit" disabled={!chatInput.trim() || chatLoading} className="btn-primary px-3 py-2 disabled:bg-slate-300">
-                {t({ vi: 'Gửi', en: 'Send' })}
-              </button>
-            </form>
-          </aside>
+          </div>
         </div>
       </section>
 
@@ -488,7 +208,6 @@ export default function VehicleDetailPage() {
           ))}
         </div>
       </section>
-      <VoiceModeOverlay open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   );
 }
