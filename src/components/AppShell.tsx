@@ -65,23 +65,23 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {count > 0 ? (
               <Link
                 to="/compare"
-                className="hidden items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 lg:inline-flex"
+                className="btn-secondary btn-sm hidden items-center gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-700 lg:inline-flex"
               >
-                <Sparkles className="h-3.5 w-3.5" />
+                <Sparkles className="icon-sm" />
                 {t({ vi: 'Đang so sánh', en: 'Comparing' })} ({count})
               </Link>
             ) : null}
             <button
               type="button"
               onClick={toggleLanguage}
-              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+              className="btn-secondary btn-sm"
               aria-label={t({ vi: 'Đổi ngôn ngữ', en: 'Toggle language' })}
             >
               {language === 'vi' ? 'VI' : 'EN'}
             </button>
             <Link
               to="/recommendations"
-              className="hidden rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white sm:inline-flex"
+              className="btn-primary btn-md hidden sm:inline-flex"
             >
               {t({ vi: 'Xem đề xuất', en: 'View matches' })}
             </Link>
@@ -115,7 +115,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 })}
               </p>
             </div>
-            <Link to="/profile" className="btn-secondary justify-self-start px-3 py-2 text-xs sm:justify-self-end">
+            <Link to="/profile" className="btn-secondary btn-sm justify-self-start sm:justify-self-end">
               {t({ vi: 'Cập nhật hồ sơ', en: 'Refine profile' })}
             </Link>
           </section>
@@ -133,19 +133,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-lg">
           <NavLink to="/profile" className={({ isActive }) => mobileClass(isActive)}>
-            <SlidersHorizontal className="h-5 w-5" />
+            <SlidersHorizontal className="icon-md" />
             <span>{t({ vi: 'Hồ sơ', en: 'Profile' })}</span>
           </NavLink>
           <NavLink to="/recommendations" className={({ isActive }) => mobileClass(isActive)}>
-            <LayoutGrid className="h-5 w-5" />
+            <LayoutGrid className="icon-md" />
             <span>{t({ vi: 'Đề xuất', en: 'Matches' })}</span>
           </NavLink>
           <NavLink to="/cars" className={({ isActive }) => mobileClass(isActive)}>
-            <Car className="h-5 w-5" />
+            <Car className="icon-md" />
             <span>{t({ vi: 'Tất cả xe', en: 'All cars' })}</span>
           </NavLink>
           <NavLink to="/quote" className={({ isActive }) => mobileClass(isActive)}>
-            <Receipt className="h-5 w-5" />
+            <Receipt className="icon-md" />
             <span>{t({ vi: 'Báo giá', en: 'Quote' })}</span>
           </NavLink>
         </div>

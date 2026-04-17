@@ -505,7 +505,7 @@ export default function GlobalChatWidget() {
                 key={prompt}
                 type="button"
                 onClick={() => void send(prompt)}
-                className="w-full rounded-xl border border-slate-200 bg-white p-2 text-left text-xs text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                className="btn-secondary btn-sm w-full rounded-xl text-left"
               >
                 {prompt}
               </button>
@@ -550,14 +550,14 @@ export default function GlobalChatWidget() {
               <button
                 type="button"
                 onClick={confirmPendingAction}
-                className="rounded-full bg-cyan-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-cyan-700"
+                className="btn-primary btn-xs"
               >
                 {t({ vi: 'Đồng ý', en: 'Confirm' })}
               </button>
               <button
                 type="button"
                 onClick={rejectPendingAction}
-                className="rounded-full border border-cyan-300 bg-white px-3 py-1 text-[11px] font-semibold text-cyan-700 hover:bg-cyan-100"
+                className="btn-secondary btn-xs border-cyan-300 text-cyan-700 hover:bg-cyan-100"
               >
                 {t({ vi: 'Hủy', en: 'Cancel' })}
               </button>
@@ -583,12 +583,12 @@ export default function GlobalChatWidget() {
           <button
             type="button"
             onClick={() => setVoiceOpen(true)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            className="btn-icon shrink-0"
             aria-label={t({ vi: 'Mở chế độ giọng nói', en: 'Open voice mode' })}
           >
-            <Mic className="h-4 w-4" />
+            <Mic className="icon-sm" />
           </button>
-          <button type="submit" disabled={!input.trim() || loading} className="btn-primary shrink-0 px-3 py-2 text-xs disabled:bg-slate-300">
+          <button type="submit" disabled={!input.trim() || loading} className="btn-primary btn-sm shrink-0 disabled:bg-slate-300">
             {t({ vi: 'Gửi', en: 'Send' })}
           </button>
         </div>

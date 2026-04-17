@@ -146,10 +146,10 @@ export default function RecommendationsPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Link to={`/vehicle/${topPick.vehicle.modelSlug}`} className="btn-primary px-3 py-2 text-xs">
+                <Link to={`/vehicle/${topPick.vehicle.modelSlug}`} className="btn-primary btn-sm">
                   {t({ vi: 'Xem chi tiết ngay', en: 'View details now' })}
                 </Link>
-                <Link to={`/quote?model=${topPick.vehicle.modelSlug}`} className="btn-secondary px-3 py-2 text-xs">
+                <Link to={`/quote?model=${topPick.vehicle.modelSlug}`} className="btn-secondary btn-sm">
                   {t({ vi: 'Nhận báo giá nhanh', en: 'Get instant quote' })}
                 </Link>
               </div>
@@ -220,7 +220,7 @@ export default function RecommendationsPage() {
                 setVehicleTypeFilter('all');
                 setPowertrainFilter('all');
               }}
-              className="btn-secondary min-h-[42px] w-full px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-secondary btn-sm w-full disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t({ vi: 'Đặt lại bộ lọc', en: 'Reset filters' })}
             </button>
@@ -283,11 +283,11 @@ export default function RecommendationsPage() {
                     en: 'Final pricing and incentives may vary by location and timing.',
                   })}
                 </p>
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <Link
                     to={`/vehicle/${vehicle.modelSlug}`}
                     onClick={() => trackEvent('recommendation_clicked', { vehicleModelSlug: vehicle.modelSlug })}
-                    className="btn-primary min-h-[40px] px-3 py-2 text-center text-xs"
+                    className="btn-primary btn-action"
                   >
                     {t({ vi: 'Chi tiết', en: 'Details' })}
                   </Link>
@@ -295,14 +295,17 @@ export default function RecommendationsPage() {
                     type="button"
                     onClick={() => toggleVehicle(vehicle.id)}
                     className={clsx(
-                      'min-h-[40px] rounded-full border px-3 py-2 text-xs font-semibold',
-                      inCompare ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-700',
+                      'btn-secondary btn-action',
+                      inCompare && 'btn-compare-active',
                     )}
                   >
-                    {inCompare ? t({ vi: 'Đang so sánh', en: 'In compare' }) : t({ vi: 'So sánh', en: 'Compare' })}
+                    {inCompare ? t({ vi: 'Đã chọn', en: 'Selected' }) : t({ vi: 'So sánh', en: 'Compare' })}
                   </button>
-                  <Link to={`/quote?model=${vehicle.modelSlug}`} className="btn-secondary col-span-2 min-h-[40px] border-slate-900 px-3 py-2 text-center text-xs text-slate-900 sm:col-span-1">
-                    {t({ vi: 'Nhận báo giá', en: 'Get quote' })}
+                  <Link
+                    to={`/quote?model=${vehicle.modelSlug}`}
+                    className="btn-secondary btn-action col-span-2 border-slate-900 text-slate-900"
+                  >
+                    {t({ vi: 'Báo giá', en: 'Quote' })}
                   </Link>
                 </div>
               </article>
@@ -312,7 +315,7 @@ export default function RecommendationsPage() {
       </main>
       {count > 0 ? (
         <div className="fixed inset-x-4 bottom-[calc(6.8rem+env(safe-area-inset-bottom))] z-30 md:hidden">
-          <Link to="/compare" className="btn-primary flex min-h-[44px] w-full items-center justify-center shadow-lg">
+          <Link to="/compare" className="btn-primary btn-md flex w-full items-center justify-center shadow-lg">
             {t({ vi: 'Mở so sánh', en: 'Open compare' })} ({count})
           </Link>
         </div>

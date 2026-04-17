@@ -57,13 +57,13 @@ export default function ProfilePage() {
         </div>
 
         <div className="mt-6 flex flex-wrap gap-2">
-          <Link to="/" className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+          <Link to="/" className="btn-primary btn-md">
             {t({ vi: 'Tiếp tục trả lời', en: 'Continue questionnaire' })}
           </Link>
-          <Link to="/recommendations" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+          <Link to="/recommendations" className="btn-secondary btn-md">
             {t({ vi: 'Xem đề xuất', en: 'View matches' })}
           </Link>
-          <Link to="/concierge" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+          <Link to="/concierge" className="btn-secondary btn-md">
             {t({ vi: 'Hỏi trợ lý AI', en: 'Ask AI assistant' })}
           </Link>
         </div>
@@ -104,7 +104,7 @@ export default function ProfilePage() {
           <button
             type="button"
             onClick={resetProfile}
-            className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
+            className="btn-danger btn-md"
           >
             {t({ vi: 'Đặt lại hồ sơ và lộ trình', en: 'Reset profile and onboarding' })}
           </button>

@@ -11,6 +11,7 @@ import { useProfile } from '../context/ProfileContext';
 type SortBy = 'name-az' | 'price-low' | 'price-high';
 type VehicleTypeFilter = 'all' | 'sedan' | 'suv' | 'crossover' | 'hatchback';
 type PowertrainFilter = 'all' | 'ice' | 'hybrid' | 'phev' | 'ev';
+const CARS_PER_PAGE = 12;
 
 export default function CarsPage() {
   const { language, t } = useLanguage();
@@ -20,6 +21,7 @@ export default function CarsPage() {
   const [sortBy, setSortBy] = useState<SortBy>('name-az');
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<VehicleTypeFilter>('all');
   const [powertrainFilter, setPowertrainFilter] = useState<PowertrainFilter>('all');
+  const [currentPage, setCurrentPage] = useState(1);
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
 
   const allCars = useMemo(
@@ -64,6 +66,33 @@ export default function CarsPage() {
     });
     return list;
   }, [allCars, powertrainFilter, query, sortBy, vehicleTypeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCars.length / CARS_PER_PAGE));
+  const pageStart = filteredCars.length === 0 ? 0 : (currentPage - 1) * CARS_PER_PAGE + 1;
+  const pageEnd = Math.min(currentPage * CARS_PER_PAGE, filteredCars.length);
+  const visiblePageNumbers = useMemo(() => {
+    const pages: number[] = [];
+    const start = Math.max(1, currentPage - 2);
+    const end = Math.min(totalPages, start + 4);
+    const adjustedStart = Math.max(1, end - 4);
+    for (let page = adjustedStart; page <= end; page += 1) {
+      pages.push(page);
+    }
+    return pages;
+  }, [currentPage, totalPages]);
+
+  const paginatedCars = useMemo(() => {
+    const start = (currentPage - 1) * CARS_PER_PAGE;
+    return filteredCars.slice(start, start + CARS_PER_PAGE);
+  }, [currentPage, filteredCars]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [powertrainFilter, query, sortBy, vehicleTypeFilter, language]);
+
+  useEffect(() => {
+    setCurrentPage(previousPage => Math.min(previousPage, totalPages));
+  }, [totalPages]);
 
   useEffect(() => {
     if (!aiRecommendationControls || aiRecommendationControls.source !== 'ai-copilot') return;
@@ -172,7 +201,7 @@ export default function CarsPage() {
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {filteredCars.map(item => {
+        {paginatedCars.map(item => {
           const vehicle = item.localized;
           const inCompare = isInCompare(vehicle.id);
           return (
@@ -191,22 +220,22 @@ export default function CarsPage() {
               <p className="mt-2 text-xs text-slate-600">{vehicle.priceBand}</p>
               <p className="mt-2 text-sm text-slate-700">{vehicle.thesis}</p>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <Link to={`/vehicle/${vehicle.modelSlug}`} className="btn-primary min-h-[40px] px-3 py-2 text-center text-xs">
+                <Link to={`/vehicle/${vehicle.modelSlug}`} className="btn-primary btn-action">
                   {t({ vi: 'Chi tiết', en: 'Details' })}
                 </Link>
                 <button
                   type="button"
                   onClick={() => toggleVehicle(vehicle.id)}
                   className={cx(
-                    'min-h-[40px] rounded-full border px-3 py-2 text-xs font-semibold',
-                    inCompare ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-700',
+                    'btn-secondary btn-action',
+                    inCompare && 'btn-compare-active',
                   )}
                 >
-                  {inCompare ? t({ vi: 'Đang so sánh', en: 'In compare' }) : t({ vi: 'So sánh', en: 'Compare' })}
+                  {inCompare ? t({ vi: 'Đã chọn', en: 'Selected' }) : t({ vi: 'So sánh', en: 'Compare' })}
                 </button>
                 <Link
                   to={`/quote?model=${vehicle.modelSlug}`}
-                  className="btn-secondary col-span-2 min-h-[40px] border-slate-900 px-3 py-2 text-center text-xs text-slate-900 sm:col-span-1"
+                  className="btn-secondary btn-action col-span-2 border-slate-900 text-slate-900 sm:col-span-1"
                 >
                   {t({ vi: 'Báo giá', en: 'Quote' })}
                 </Link>
@@ -215,9 +244,51 @@ export default function CarsPage() {
           );
         })}
       </section>
+      {filteredCars.length > CARS_PER_PAGE ? (
+        <section className="surface p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-600">
+              {t({ vi: 'Hiển thị', en: 'Showing' })} {pageStart}-{pageEnd} / {filteredCars.length}{' '}
+              {t({ vi: 'mẫu xe', en: 'cars' })} · {t({ vi: 'Trang', en: 'Page' })} {currentPage}/{totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                className="btn-secondary btn-action disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t({ vi: 'Trước', en: 'Previous' })}
+              </button>
+              {visiblePageNumbers.map(page => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  aria-current={page === currentPage ? 'page' : undefined}
+                  className={cx(
+                    'btn-secondary btn-action min-w-[40px]',
+                    page === currentPage && 'btn-compare-active',
+                  )}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                className="btn-secondary btn-action disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t({ vi: 'Sau', en: 'Next' })}
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
       {count > 0 ? (
         <div className="fixed inset-x-4 bottom-[calc(6.8rem+env(safe-area-inset-bottom))] z-30 md:hidden">
-          <Link to="/compare" className="btn-primary flex min-h-[44px] w-full items-center justify-center shadow-lg">
+          <Link to="/compare" className="btn-primary btn-md flex w-full items-center justify-center shadow-lg">
             {t({ vi: 'Mở so sánh', en: 'Open compare' })} ({count})
           </Link>
         </div>

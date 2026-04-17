@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { vehicles } from '../data/vehicles';
 import { saveLead } from '../lib/leads';
@@ -38,6 +38,7 @@ export default function QuotePage() {
   const [documentChecklistAccepted, setDocumentChecklistAccepted] = useState(false);
   const [reservationIntent, setReservationIntent] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const vehicle = useMemo(
     () => {
@@ -68,8 +69,18 @@ export default function QuotePage() {
     }
   }, [variantKey, variants]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const form = e.currentTarget;
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      const firstInvalid = form.querySelector<HTMLElement>(':invalid');
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstInvalid.focus({ preventScroll: true });
+      }
+      return;
+    }
     if (!vehicle) return;
     if (!name.trim() || !email.trim() || !phone.trim()) return;
 
@@ -107,9 +118,9 @@ export default function QuotePage() {
         <p className="kicker">{t({ vi: 'Đã gửi yêu cầu báo giá', en: 'Quote submitted' })}</p>
         <h1 className="mt-2 text-2xl font-bold text-slate-900">{t({ vi: 'Yêu cầu của bạn đã được lưu', en: 'Your request is saved' })}</h1>
         <p className="mt-2 text-sm text-slate-600">{t({ vi: 'Tư vấn viên có thể tiếp tục sang bước đặt lịch và bàn giao showroom.', en: 'A consultant can now continue with booking intent and showroom handoff.' })}</p>
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Link to={vehicle ? `/booking?model=${vehicle.modelSlug}` : '/booking'} className="btn-primary">{t({ vi: 'Tiếp tục đặt lịch', en: 'Continue to booking' })}</Link>
-          <Link to="/showrooms" className="btn-secondary">{t({ vi: 'Xem showroom', en: 'View showrooms' })}</Link>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Link to={vehicle ? `/booking?model=${vehicle.modelSlug}` : '/booking'} className="btn-primary btn-md w-full justify-center sm:w-auto">{t({ vi: 'Tiếp tục đặt lịch', en: 'Continue to booking' })}</Link>
+          <Link to="/showrooms" className="btn-secondary btn-md w-full justify-center sm:w-auto">{t({ vi: 'Xem showroom', en: 'View showrooms' })}</Link>
         </div>
       </section>
     );
@@ -140,10 +151,11 @@ export default function QuotePage() {
     insuranceAddOn +
     showroomPackage;
   const currentEstimate = subtotalBeforeDiscount - policyDiscount;
+  const canSubmit = Boolean(vehicle && name.trim() && email.trim() && phone.trim());
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <form onSubmit={submit} className="order-2 surface p-4 sm:p-5 xl:order-1">
+      <form ref={formRef} onSubmit={submit} className="order-2 surface p-4 pb-[calc(6.2rem+env(safe-area-inset-bottom))] sm:p-5 sm:pb-5 xl:order-1">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="kicker">{t({ vi: 'Showroom', en: 'Showroom' })}</p>
@@ -155,8 +167,8 @@ export default function QuotePage() {
           </div>
           <button
             type="submit"
-            disabled={!vehicle}
-            className="btn-primary min-h-[42px] w-full px-4 py-2 text-sm disabled:bg-slate-300 sm:w-auto"
+            disabled={!canSubmit}
+            className="btn-primary btn-md hidden disabled:bg-slate-300 sm:inline-flex"
           >
             {t({ vi: 'Tiếp tục', en: 'Move Forward' })}
           </button>
@@ -338,22 +350,31 @@ export default function QuotePage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-semibold text-slate-700">
               {t({ vi: 'Họ và tên', en: 'Full name' })}
-              <input required value={name} onChange={e => setName(e.target.value)} className="input-base min-h-[42px]" />
+              <input required autoComplete="name" enterKeyHint="next" value={name} onChange={e => setName(e.target.value)} className="input-base min-h-[44px]" />
             </label>
             <label className="text-sm font-semibold text-slate-700">
               {t({ vi: 'Số điện thoại', en: 'Phone' })}
-              <input required type="tel" value={phone} onChange={e => setPhone(e.target.value)} className="input-base min-h-[42px]" />
+              <input required type="tel" inputMode="tel" autoComplete="tel" enterKeyHint="next" value={phone} onChange={e => setPhone(e.target.value)} className="input-base min-h-[44px]" />
             </label>
             <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
               Email
-              <input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="input-base min-h-[42px]" />
+              <input required type="email" inputMode="email" autoComplete="email" enterKeyHint="next" value={email} onChange={e => setEmail(e.target.value)} className="input-base min-h-[44px]" />
             </label>
             <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
               {t({ vi: 'Ghi chú', en: 'Notes' })}
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="input-base py-2.5" />
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} enterKeyHint="send" className="input-base py-2.5" />
             </label>
           </div>
         </section>
+        <div className="sticky bottom-[calc(4.6rem+env(safe-area-inset-bottom))] z-20 -mx-4 mt-5 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:hidden">
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="btn-primary btn-md flex w-full items-center justify-center disabled:bg-slate-300"
+          >
+            {t({ vi: 'Tiếp tục', en: 'Move Forward' })}
+          </button>
+        </div>
       </form>
 
       <aside className="order-1 surface h-fit p-4 sm:p-5 xl:order-2 xl:sticky xl:top-24">

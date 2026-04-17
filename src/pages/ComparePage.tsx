@@ -78,6 +78,18 @@ export default function ComparePage() {
     ],
     [language, t, compared],
   );
+  const sectionRows = useMemo(() => {
+    const grouped = new Map<string, RowDef[]>();
+    rows.forEach(row => {
+      const bucket = grouped.get(row.section);
+      if (bucket) {
+        bucket.push(row);
+        return;
+      }
+      grouped.set(row.section, [row]);
+    });
+    return Array.from(grouped.entries());
+  }, [rows]);
 
   return (
     <div className="space-y-5">
@@ -95,12 +107,12 @@ export default function ComparePage() {
               })}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Link to="/recommendations" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+          <div className="flex flex-wrap gap-2">
+            <Link to="/recommendations" className="btn-secondary btn-md">
               {t({ vi: 'Về danh sách đề xuất', en: 'Back to shortlist' })}
             </Link>
             {compared.length > 0 ? (
-              <button type="button" onClick={clearCompare} className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700">
+              <button type="button" onClick={clearCompare} className="btn-danger btn-md">
                 {t({ vi: 'Xóa tất cả', en: 'Clear all' })}
               </button>
             ) : null}
@@ -114,66 +126,104 @@ export default function ComparePage() {
           <p className="mt-2 text-sm text-slate-600">
             {t({ vi: 'Dùng nút “Thêm so sánh” trong trang Đề xuất hoặc Chi tiết xe.', en: 'Use “Add compare” in Recommendations or Vehicle Detail.' })}
           </p>
-          <Link to="/recommendations" className="mt-5 inline-flex rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white">
+          <Link to="/recommendations" className="btn-primary btn-md mt-5 inline-flex">
             {t({ vi: 'Đi tới đề xuất', en: 'Go to recommendations' })}
           </Link>
         </section>
       ) : (
-        <section className="surface overflow-x-auto p-0">
-          <table className="min-w-[780px] w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200">
-                <th className="sticky left-0 z-10 min-w-[160px] bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {t({ vi: 'Thuộc tính', en: 'Attribute' })}
-                </th>
-                {compared.map(v => (
-                  <th key={v.id} className="min-w-[220px] border-l border-slate-100 px-3 py-3 align-bottom">
-                    <VehicleImage
-                      src={getVehicleImage(v.modelSlug)}
-                      fallbackSources={getVehicleImageSources(v.modelSlug).slice(1)}
-                      alt={v.name}
-                      className="aspect-[16/10] w-full rounded-xl object-cover"
-                    />
-                    <p className="mt-2 text-sm font-bold text-slate-900">{v.name}</p>
-                    <button type="button" onClick={() => removeVehicle(v.id)} className="mt-1 text-xs font-semibold text-red-600">
-                      {t({ vi: 'Bỏ', en: 'Remove' })}
-                    </button>
+        <>
+          <section className="space-y-3 md:hidden">
+            {compared.map(v => (
+              <article key={v.id} className="surface p-3">
+                <VehicleImage
+                  src={getVehicleImage(v.modelSlug)}
+                  fallbackSources={getVehicleImageSources(v.modelSlug).slice(1)}
+                  alt={v.name}
+                  className="aspect-[16/10] w-full rounded-xl object-cover"
+                />
+                <div className="mt-2 flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{v.name}</p>
+                    <p className="text-xs text-slate-500">{v.trim}</p>
+                  </div>
+                  <button type="button" onClick={() => removeVehicle(v.id)} className="text-xs font-semibold text-red-600">
+                    {t({ vi: 'Bỏ', en: 'Remove' })}
+                  </button>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {sectionRows.map(([sectionName, section]) => (
+                    <div key={`${v.id}-${sectionName}`} className="rounded-xl border border-slate-200 bg-slate-50/60 p-2.5">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{sectionName}</p>
+                      <dl className="mt-2 space-y-1.5">
+                        {section.map(row => (
+                          <div key={`${v.id}-${row.key}`} className="flex items-start justify-between gap-3 text-sm">
+                            <dt className="text-slate-500">{row.label}</dt>
+                            <dd className="max-w-[52%] text-right font-semibold text-slate-900 break-words">{row.get(v.id)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </section>
+          <section className="surface hidden overflow-x-auto p-0 md:block">
+            <table className="min-w-[780px] w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="sticky left-0 z-10 min-w-[160px] bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {t({ vi: 'Thuộc tính', en: 'Attribute' })}
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => {
-                const values = compared.map(v => row.get(v.id));
-                const isDiff = new Set(values.map(v => v.toLowerCase())).size > 1;
-                const previous = rows[rows.findIndex(r => r.key === row.key) - 1];
-                const shouldShowSection = !previous || previous.section !== row.section;
-                return (
-                  <Fragment key={row.key}>
-                    {shouldShowSection ? (
-                      <tr className="border-b border-slate-200 bg-slate-50">
-                        <th className="sticky left-0 z-10 bg-slate-50 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                          {row.section}
-                        </th>
-                        {compared.map(v => (
-                          <td key={`${row.section}-${v.id}`} className="border-l border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                            {v.name}
-                          </td>
+                  {compared.map(v => (
+                    <th key={v.id} className="min-w-[220px] border-l border-slate-100 px-3 py-3 align-bottom">
+                      <VehicleImage
+                        src={getVehicleImage(v.modelSlug)}
+                        fallbackSources={getVehicleImageSources(v.modelSlug).slice(1)}
+                        alt={v.name}
+                        className="aspect-[16/10] w-full rounded-xl object-cover"
+                      />
+                      <p className="mt-2 text-sm font-bold text-slate-900">{v.name}</p>
+                      <button type="button" onClick={() => removeVehicle(v.id)} className="mt-1 text-xs font-semibold text-red-600">
+                        {t({ vi: 'Bỏ', en: 'Remove' })}
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(row => {
+                  const values = compared.map(v => row.get(v.id));
+                  const isDiff = new Set(values.map(v => v.toLowerCase())).size > 1;
+                  const previous = rows[rows.findIndex(r => r.key === row.key) - 1];
+                  const shouldShowSection = !previous || previous.section !== row.section;
+                  return (
+                    <Fragment key={row.key}>
+                      {shouldShowSection ? (
+                        <tr className="border-b border-slate-200 bg-slate-50">
+                          <th className="sticky left-0 z-10 bg-slate-50 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                            {row.section}
+                          </th>
+                          {compared.map(v => (
+                            <td key={`${row.section}-${v.id}`} className="border-l border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              {v.name}
+                            </td>
+                          ))}
+                        </tr>
+                      ) : null}
+                      <tr className="border-b border-slate-100">
+                        <th className="sticky left-0 z-10 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{row.label}</th>
+                        {values.map((val, i) => (
+                          <td key={`${row.key}-${i}`} className={isDiff ? 'border-l border-slate-100 bg-slate-100 px-3 py-3 text-slate-800' : 'border-l border-slate-100 px-3 py-3 text-slate-800'}>{val}</td>
                         ))}
                       </tr>
-                    ) : null}
-                    <tr className="border-b border-slate-100">
-                      <th className="sticky left-0 z-10 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{row.label}</th>
-                      {values.map((val, i) => (
-                        <td key={`${row.key}-${i}`} className={isDiff ? 'border-l border-slate-100 bg-slate-100 px-3 py-3 text-slate-800' : 'border-l border-slate-100 px-3 py-3 text-slate-800'}>{val}</td>
-                      ))}
-                    </tr>
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </section>
+        </>
       )}
     </div>
   );

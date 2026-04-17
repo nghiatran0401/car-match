@@ -122,13 +122,13 @@ export default function HomePage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
                 to={`/vehicle/${featuredMatch?.vehicle.modelSlug ?? 'ec40'}`}
-                className="btn-secondary inline-flex border-white/20 bg-white text-slate-900"
+                className="btn-secondary btn-md inline-flex border-white/20 bg-white text-slate-900"
               >
                 {t({ vi: 'Xem chi tiết', en: 'View details' })}
               </Link>
               <Link
                 to={`/quote?model=${featuredMatch?.vehicle.modelSlug ?? 'ec40'}`}
-                className="rounded-full border border-white/25 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                className="btn-secondary btn-md border-white/25 bg-transparent text-white hover:bg-white/10"
               >
                 {t({ vi: 'Nhận báo giá', en: 'Get quote' })}
               </Link>
@@ -142,7 +142,7 @@ export default function HomePage() {
                     setFlippingToQuestionnaire(false);
                   }, 520);
                 }}
-                className="rounded-full border border-white/25 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                className="btn-secondary btn-md border-white/25 bg-transparent text-white hover:bg-white/10"
               >
                 {t({ vi: 'Sửa câu trả lời', en: 'Edit answers' })}
               </button>
@@ -164,7 +164,7 @@ export default function HomePage() {
       <section className="surface p-5 sm:p-6">
         <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white to-slate-50 p-4 sm:p-5">
           <p className="kicker">CarMatch</p>
-          <h1 className="mt-2 whitespace-nowrap text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+          <h1 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
             {t({ vi: 'Showroom thông minh được cá nhân hóa cho bạn.', en: 'A smart dealership crafted for you.' })}
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
@@ -243,14 +243,14 @@ export default function HomePage() {
                 type="button"
                 onClick={goBack}
                 disabled={!canBack}
-                className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-40"
+                className="btn-secondary btn-xs disabled:opacity-40"
               >
                 {t({ vi: 'Quay lại', en: 'Back' })}
               </button>
               <button
                 type="button"
                 onClick={goSkip}
-                className="btn-secondary border-transparent px-3 py-1.5 text-xs text-slate-500 hover:text-slate-900"
+                className="btn-secondary btn-xs border-transparent text-slate-500 hover:text-slate-900"
               >
                 {t({ vi: 'Chưa chắc, để sau', en: 'Not sure yet' })}
               </button>

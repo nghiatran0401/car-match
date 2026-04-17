@@ -107,14 +107,14 @@ export default function ShowroomsPage() {
               <p className="text-sm font-semibold text-slate-900">{selected.name}</p>
               <p className="mt-1 text-xs text-slate-600">{selected.address}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <a href={`tel:${selected.phone.replace(/\s/g, '')}`} className="btn-primary">
+                <a href={`tel:${selected.phone.replace(/\s/g, '')}`} className="btn-primary btn-md">
                   {t({ vi: 'Gọi showroom', en: 'Call showroom' })}
                 </a>
                 <a
                   href={mapsDirectionsUrl(selected.lat, selected.lon)}
                   target="_blank"
                   rel="noreferrer"
-                  className="btn-secondary"
+                  className="btn-secondary btn-md"
                 >
                   {t({ vi: 'Mở bản đồ', en: 'Open maps' })}
                 </a>
@@ -151,18 +151,18 @@ export default function ShowroomsPage() {
                     <p className="text-xs text-slate-600">{showroom.address}</p>
                     <p className="text-xs text-slate-500">{showroom.hours}</p>
                     <div className="flex flex-wrap gap-1 pt-1">
-                      <a href={`tel:${showroom.phone.replace(/\s/g, '')}`} className="btn-primary !px-2.5 !py-1.5 !text-xs">
+                      <a href={`tel:${showroom.phone.replace(/\s/g, '')}`} className="btn-primary btn-xs">
                         {t({ vi: 'Gọi', en: 'Call' })}
                       </a>
                       <a
                         href={mapsDirectionsUrl(showroom.lat, showroom.lon)}
                         target="_blank"
                         rel="noreferrer"
-                        className="btn-secondary !px-2.5 !py-1.5 !text-xs"
+                        className="btn-secondary btn-xs"
                       >
                         {t({ vi: 'Chỉ đường', en: 'Directions' })}
                       </a>
-                      <Link to="/booking" className="btn-secondary !px-2.5 !py-1.5 !text-xs">
+                      <Link to="/booking" className="btn-secondary btn-xs">
                         {t({ vi: 'Đặt lịch', en: 'Book' })}
                       </Link>
                     </div>

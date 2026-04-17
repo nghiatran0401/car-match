@@ -28,13 +28,24 @@ export default function BookingPage() {
   const [channel, setChannel] = useState('phone');
   const [notes, setNotes] = useState('');
   const [done, setDone] = useState(false);
+  const canSubmit = Boolean(name.trim() && email.trim() && phone.trim());
 
   useEffect(() => {
     trackEvent('booking_started', { vehicleModelSlug: vehicle?.modelSlug });
   }, [vehicle?.modelSlug]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const form = e.currentTarget;
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      const firstInvalid = form.querySelector<HTMLElement>(':invalid');
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstInvalid.focus({ preventScroll: true });
+      }
+      return;
+    }
     if (!name.trim() || !email.trim() || !phone.trim()) return;
 
     saveLead({
@@ -60,8 +71,8 @@ export default function BookingPage() {
         <h1 className="mt-2 text-2xl font-bold text-slate-900">{t({ vi: 'Đã tiếp nhận yêu cầu', en: 'Request received' })}</h1>
         <p className="mt-2 text-sm text-slate-600">{t({ vi: 'Tư vấn viên sẽ liên hệ theo kênh và thời gian bạn chọn.', en: 'A consultant can follow up using your preferred channel and timing.' })}</p>
         <div className="mt-5 flex flex-wrap justify-center gap-2">
-          <Link to="/showrooms" className="btn-primary">{t({ vi: 'Xem showroom', en: 'View showrooms' })}</Link>
-          <Link to="/recommendations" className="btn-secondary">{t({ vi: 'Về đề xuất', en: 'Back to shortlist' })}</Link>
+          <Link to="/showrooms" className="btn-primary btn-md">{t({ vi: 'Xem showroom', en: 'View showrooms' })}</Link>
+          <Link to="/recommendations" className="btn-secondary btn-md">{t({ vi: 'Về đề xuất', en: 'Back to shortlist' })}</Link>
         </div>
       </section>
     );
@@ -69,7 +80,7 @@ export default function BookingPage() {
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-      <form onSubmit={submit} className="surface p-5 sm:p-6">
+      <form onSubmit={submit} className="surface p-5 pb-[calc(6.2rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6">
         <p className="kicker">{t({ vi: 'Nhu cầu mua / thăm showroom', en: 'Offer / visit intent' })}</p>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{t({ vi: 'Đặt lịch tư vấn', en: 'Book consultant follow-up' })}</h1>
         <p className="mt-2 text-sm text-slate-600">{t({ vi: 'Tập trung thông tin liên hệ, showroom và thời gian hẹn trong một biểu mẫu.', en: 'Capture contact preference, showroom, and appointment intent in one form.' })}</p>
@@ -80,13 +91,13 @@ export default function BookingPage() {
           </div>
 
           <label className="block text-sm font-semibold text-slate-700">{t({ vi: 'Họ và tên', en: 'Full name' })}
-            <input required value={name} onChange={e => setName(e.target.value)} className="input-base min-h-[48px]" />
+            <input required autoComplete="name" enterKeyHint="next" value={name} onChange={e => setName(e.target.value)} className="input-base min-h-[48px]" />
           </label>
           <label className="block text-sm font-semibold text-slate-700">Email
-            <input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="input-base min-h-[48px]" />
+            <input required type="email" inputMode="email" autoComplete="email" enterKeyHint="next" value={email} onChange={e => setEmail(e.target.value)} className="input-base min-h-[48px]" />
           </label>
           <label className="block text-sm font-semibold text-slate-700">{t({ vi: 'Số điện thoại', en: 'Phone' })}
-            <input required type="tel" value={phone} onChange={e => setPhone(e.target.value)} className="input-base min-h-[48px]" />
+            <input required type="tel" inputMode="tel" autoComplete="tel" enterKeyHint="next" value={phone} onChange={e => setPhone(e.target.value)} className="input-base min-h-[48px]" />
           </label>
 
           <label className="block text-sm font-semibold text-slate-700">{t({ vi: 'Showroom mong muốn', en: 'Preferred showroom' })}
@@ -104,7 +115,7 @@ export default function BookingPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-semibold text-slate-700">{t({ vi: 'Ngày mong muốn', en: 'Preferred date' })}
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} className="input-base min-h-[48px]" />
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} enterKeyHint="next" className="input-base min-h-[48px]" />
             </label>
             <label className="text-sm font-semibold text-slate-700">{t({ vi: 'Khung giờ', en: 'Time window' })}
               <select value={timeWindow} onChange={e => setTimeWindow(e.target.value)} className="input-base min-h-[48px]">
@@ -124,10 +135,19 @@ export default function BookingPage() {
           </label>
 
           <label className="block text-sm font-semibold text-slate-700">{t({ vi: 'Ghi chú (không bắt buộc)', en: 'Notes (optional)' })}
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="input-base py-2.5" placeholder={t({ vi: 'Lái thử, thu xe cũ, câu hỏi tài chính...', en: 'Test drive, trade-in, finance questions...' })} />
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} enterKeyHint="send" className="input-base py-2.5" placeholder={t({ vi: 'Lái thử, thu xe cũ, câu hỏi tài chính...', en: 'Test drive, trade-in, finance questions...' })} />
           </label>
 
-          <button type="submit" className="btn-primary w-full py-3">{t({ vi: 'Gửi yêu cầu đặt lịch', en: 'Submit booking intent' })}</button>
+          <button type="submit" disabled={!canSubmit} className="btn-primary btn-md hidden w-full justify-center disabled:bg-slate-300 sm:inline-flex">{t({ vi: 'Gửi yêu cầu đặt lịch', en: 'Submit booking intent' })}</button>
+          <div className="sticky bottom-[calc(4.6rem+env(safe-area-inset-bottom))] z-20 -mx-5 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur sm:hidden">
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="btn-primary btn-md flex w-full items-center justify-center disabled:bg-slate-300"
+            >
+              {t({ vi: 'Gửi yêu cầu đặt lịch', en: 'Submit booking intent' })}
+            </button>
+          </div>
         </div>
       </form>
 
@@ -135,7 +155,7 @@ export default function BookingPage() {
         <p className="kicker">{t({ vi: 'Bước tiếp theo', en: 'Next step' })}</p>
         <h2 className="mt-2 text-xl font-bold text-slate-900">{t({ vi: 'Sẵn sàng bàn giao qua showroom', en: 'Showroom handoff ready' })}</h2>
         <p className="mt-2 text-sm text-slate-600">{t({ vi: 'Luồng này gắn mẫu xe và thông tin liên hệ của bạn vào lead sẵn sàng đặt hẹn.', en: 'This flow ties your selected vehicle and contact details to an appointment-ready lead record.' })}</p>
-        <Link to="/showrooms" className="btn-secondary mt-4 inline-flex">{t({ vi: 'Xem bản đồ showroom', en: 'Browse showroom map' })}</Link>
+        <Link to="/showrooms" className="btn-secondary btn-md mt-4 inline-flex">{t({ vi: 'Xem bản đồ showroom', en: 'Browse showroom map' })}</Link>
       </aside>
     </div>
   );
