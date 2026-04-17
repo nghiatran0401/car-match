@@ -1,17 +1,15 @@
-# Qwen Voice Studio
+# CarMatch Voice Assistant
 
-Full-stack voice chat app with:
+Full-stack car recommendation app with realtime voice mode:
 
-- Next.js App Router frontend in `frontend/`
+- Vite + React frontend in `src/`
 - FastAPI backend in `backend/`
-- Browser microphone capture with Web Audio / WebRTC media devices
-- Qwen3.5 Omni Realtime for continuous duplex voice conversation
-- Automatic server-side VAD, interruption handling, and streaming audio playback
-- Vercel Services deployment config for one shared live URL
+- Browser microphone capture with Web Audio
+- Qwen3.5 Omni Realtime websocket voice conversation
+- Vercel hosting for web app
+- Fly.io hosting for websocket-capable realtime backend
 
-The original Vite car-match app is still in the repo under `src/`.
-
-## Vite AI Chat + Voice Mode
+## Voice Mode Entry Points
 
 The Vite app now includes a Perplexity-style voice mode entry point inside all AI chatbot UIs:
 
@@ -21,20 +19,23 @@ The Vite app now includes a Perplexity-style voice mode entry point inside all A
 
 When users tap the mic icon, a full voice overlay opens and they can talk to the AI hands-free with continuous realtime turn detection and streamed voice responses.
 
-The Vite voice mode now uses the same realtime websocket pipeline as `frontend/components/voice-studio.tsx` with backend relay at `backend/main.py` (`/realtime`).
+Voice mode connects to backend realtime websocket at `/realtime` (or explicit `VITE_REALTIME_WS_URL` when configured).
 
 ## Project Layout
 
 ```text
-frontend/            # Next.js web app
+src/                 # Vite web app
 backend/             # FastAPI service
-vercel.json          # Vercel Services routing
-src/                 # Legacy Vite app kept intact
+vercel.json          # Vercel deployment routing
+fly.toml             # Fly.io realtime backend deployment config
+frontend/            # Legacy Next.js app (not primary deployment)
 ```
 
 ## Environment
 
-Copy `.env.example` to `.env` and set at least:
+Copy `.env.example` to `.env` for local development, or use `.env.prod` for production values.
+
+Minimum required backend variables:
 
 ```bash
 DASHSCOPE_API_KEY=...
@@ -44,23 +45,32 @@ QWEN_OMNI_REALTIME_DEFAULT_VOICE=Tina
 QWEN_OMNI_REALTIME_VI_VOICE=Hana
 ```
 
-The backend also accepts the legacy `VITE_QWEN_*` variables already present in this repo.
-
-For the Vite app (`src/`) AI chat and voice mode, set:
+Frontend (`src/`) variables:
 
 ```bash
 VITE_QWEN_API_KEY=...
 VITE_QWEN_API_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 VITE_QWEN_MODEL=qwen-flash
+# local only
 VITE_REALTIME_WS_URL=ws://127.0.0.1:8000/realtime
+```
+
+Production note:
+
+- Do **not** set localhost values in Vercel env vars.
+- Use `VITE_API_BASE_URL=/api`.
+- Set `VITE_REALTIME_WS_URL` to a public websocket backend (for example Fly.io), such as:
+
+```bash
+VITE_REALTIME_WS_URL=wss://car-match-realtime-api.fly.dev/realtime
 ```
 
 ## Local Run
 
-Install frontend dependencies:
+Install web dependencies:
 
 ```bash
-npm run voice:install:web
+npm install
 ```
 
 Install backend dependencies:
@@ -75,25 +85,13 @@ Run the API:
 npm run voice:dev:api
 ```
 
-Run the Next.js frontend in another terminal:
+Run the Vite frontend in another terminal:
 
 ```bash
-npm run voice:dev:web
+npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-The frontend defaults to `http://localhost:3000` and expects the API at `NEXT_PUBLIC_API_BASE_URL` or `/api`.
-
-For separate frontend/backend local runs, place this in `frontend/.env.local`:
-
-```bash
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
-```
-
-For a single-process Vercel-style local run after dependencies are installed:
-
-```bash
-npm run voice:dev:services
-```
+Frontend runs at `http://localhost:5173`.
 
 ## Docker (one command)
 
@@ -118,31 +116,41 @@ docker compose logs -f
 docker compose down
 ```
 
-## Deploy To Vercel
+## Deploy Web To Vercel
 
 1. Install dependencies locally.
 2. Link the repo to a Vercel project.
-3. In the Vercel dashboard set the Framework Preset to `Services`.
-4. Add the same Qwen / DashScope environment variables to the project.
+3. Add production env vars in Vercel (recommend starting from `.env.prod`).
+4. Ensure websocket is configured to an external host:
+
+```bash
+VITE_REALTIME_WS_URL=wss://car-match-realtime-api.fly.dev/realtime
+```
 5. Deploy with:
 
 ```bash
 npm run voice:deploy
 ```
 
-When deployed through Services:
+## Deploy Realtime Backend To Fly.io
 
-- `frontend/` serves `/`
-- `backend/main.py` serves `/api/*`
-- the frontend automatically talks to the backend on the same domain
+This project includes `fly.toml` for backend deployment:
 
-Important:
+```bash
+flyctl auth login
+flyctl apps create car-match-realtime-api
+flyctl secrets import -a car-match-realtime-api < .env.prod
+flyctl deploy --remote-only --config fly.toml
+```
 
-- The new realtime voice path uses a backend WebSocket relay at `/api/realtime`.
-- Vercel Functions do not support acting as a WebSocket server, so the full realtime voice mode needs a websocket-capable backend host outside Vercel.
-- The existing HTTP endpoints (`/api/text-turn` and `/api/voice-turn`) remain available as fallback paths.
+Then set `VITE_REALTIME_WS_URL` in Vercel to your Fly endpoint:
+
+```bash
+wss://car-match-realtime-api.fly.dev/realtime
+```
 
 ## Notes
 
-- The realtime mode uses `qwen3.5-omni-plus-realtime` over WebSocket and streams 16 kHz mono PCM up, then plays 24 kHz PCM chunks from the model in the browser.
-- The backend still keeps the older `/api/text-turn` and `/api/voice-turn` HTTP endpoints for fallback and non-realtime deployments.
+- Realtime uses `qwen3.5-omni-plus-realtime` over WebSocket.
+- Browser streams 16 kHz mono PCM up and plays 24 kHz PCM chunks from model responses.
+- HTTP endpoints `/api/text-turn` and `/api/voice-turn` remain available as fallback.
