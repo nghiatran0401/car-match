@@ -1,109 +1,94 @@
-# CarMatch
+# Qwen Voice Studio
 
-AI-assisted car matching and dealership flow built with React, TypeScript, and Tailwind CSS.
+Full-stack voice chat app with:
 
-## Current Scope
+- Next.js App Router frontend in `frontend/`
+- FastAPI backend in `backend/`
+- Browser microphone capture with Web Audio / WebRTC media devices
+- Qwen3 ASR for transcription
+- Qwen chat completions for replies
+- Qwen TTS for spoken playback
+- Vercel Services deployment config for one shared live URL
 
-CarMatch is a client-side web app focused on:
+The original Vite car-match app is still in the repo under `src/`. This new voice app is isolated so the migration is non-destructive.
 
-- Guided buyer profiling (multi-step questionnaire)
-- Ranked vehicle recommendations
-- Vehicle detail pages and side-by-side comparison
-- Quote and booking lead capture flows
-- Showroom discovery with map interactions
-- AI concierge chat (Qwen-compatible API)
-- Bilingual UX (Vietnamese / English)
-- Lightweight analytics event buffering in `localStorage`
-
-## Routes Implemented
-
-- `/` - onboarding questionnaire
-- `/profile` - buyer profile overview
-- `/recommendations` - ranked shortlist and refinement
-- `/cars` - all vehicles listing
-- `/vehicle/:modelSlug` - vehicle detail page
-- `/compare` - vehicle comparison flow
-- `/quote` - quote request form
-- `/booking` - showroom booking form
-- `/showrooms` - showroom list + map
-- `/concierge` - full-page AI assistant
-- `/admin` - prompt/config control surface
-
-Redirects:
-
-- `/showroom` -> `/showrooms`
-- `/dashboard` -> `/profile`
-
-## Tech Stack
-
-- React 18 + TypeScript
-- Vite
-- React Router
-- Tailwind CSS
-- Leaflet + React Leaflet
-- Lucide icons
-
-## Branding (Current)
-
-Brand identity is centralized in `src/lib/brand.ts` and wired at runtime from `src/main.tsx`.
-
-- Brand name: `CarMatch`
-- Tagline: `Find Your Best-Fit Car, Faster`
-- Metadata + Open Graph + JSON-LD Organization schema are injected client-side
-- Theme tokens and semantic colors are defined in:
-  - `src/index.css` (CSS variables/components)
-  - `tailwind.config.js` (`brandHighlight`, `brandSecondary`)
-
-## Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-VITE_QWEN_API_KEY=your_qwen_api_key_here
-VITE_QWEN_API_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
-VITE_QWEN_MODEL=qwen-turbo
-```
-
-Notes:
-
-- `VITE_QWEN_API_KEY` is required for live assistant replies.
-- Base URL and model are optional overrides.
-
-## Local Development
-
-```bash
-npm install
-npm run dev
-```
-
-Open the Vite URL shown in terminal (usually `http://localhost:5173`).
-
-## Scripts
-
-- `npm run dev` - start local development server
-- `npm run build` - type-check and produce production build
-- `npm run preview` - preview production build locally
-- `npm run lint` - run ESLint
-
-## Project Structure (High Level)
+## Project Layout
 
 ```text
-src/
-  components/      # Shared UI pieces (shell, chat widget, media, etc.)
-  context/         # Profile, compare, and language state providers
-  data/            # Vehicles, wizard steps, showrooms
-  layouts/         # Main route layout
-  lib/             # AI, branding, analytics, scoring, lead helpers
-  pages/           # Route-level pages
-  types/           # Shared TypeScript types
+frontend/            # Next.js web app
+backend/             # FastAPI service
+vercel.json          # Vercel Services routing
+src/                 # Legacy Vite app kept intact
 ```
 
-## Current Limitations
+## Environment
 
-- No backend persistence yet (most state is local/session storage)
-- No automated test suite committed yet
-- AI concierge depends on external Qwen API availability/key setup
+Copy `.env.example` to `.env` and set at least:
 
-## License
+```bash
+DASHSCOPE_API_KEY=...
+DASHSCOPE_BASE_URL=https://dashscope-intl.aliyuncs.com
+QWEN_CHAT_MODEL=qwen3.6-plus
+QWEN_ASR_MODEL=qwen3-asr-flash
+QWEN_TTS_MODEL=qwen3-tts-flash
+```
 
-Private repository. All rights reserved.
+The backend also accepts the legacy `VITE_QWEN_*` variables already present in this repo.
+
+## Local Run
+
+Install frontend dependencies:
+
+```bash
+npm run voice:install:web
+```
+
+Install backend dependencies:
+
+```bash
+python3 -m pip install -e backend
+```
+
+Run the API:
+
+```bash
+npm run voice:dev:api
+```
+
+Run the Next.js frontend in another terminal:
+
+```bash
+npm run voice:dev:web
+```
+
+The frontend defaults to `http://localhost:3000` and expects the API at `NEXT_PUBLIC_API_BASE_URL` or `/api`.
+
+For a single-process Vercel-style local run after dependencies are installed:
+
+```bash
+npm run voice:dev:services
+```
+
+## Deploy To Vercel
+
+1. Install dependencies locally.
+2. Link the repo to a Vercel project.
+3. In the Vercel dashboard set the Framework Preset to `Services`.
+4. Add the same Qwen / DashScope environment variables to the project.
+5. Deploy with:
+
+```bash
+npm run voice:deploy
+```
+
+When deployed through Services:
+
+- `frontend/` serves `/`
+- `backend/main.py` serves `/api/*`
+- the frontend automatically talks to the backend on the same domain
+
+## Notes
+
+- The browser records microphone audio as WAV before upload because the Qwen ASR docs explicitly show `audio/wav` and `audio/mpeg` Data URLs for the OpenAI-compatible endpoint.
+- The backend uses `qwen3-asr-flash` over the OpenAI-compatible `/chat/completions` endpoint.
+- The backend uses `qwen3-tts-flash` over the DashScope multimodal generation endpoint and repackages streamed PCM into a WAV reply for the browser.

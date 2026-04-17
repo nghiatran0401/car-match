@@ -1,0 +1,7 @@
+main.py
+pyproject.toml
+qwen_voice_api.egg-info/PKG-INFO
+qwen_voice_api.egg-info/SOURCES.txt
+qwen_voice_api.egg-info/dependency_links.txt
+qwen_voice_api.egg-info/requires.txt
+qwen_voice_api.egg-info/top_level.txt
