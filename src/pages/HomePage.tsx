@@ -27,11 +27,6 @@ function selectedOptionId(step: WizardStep, profile: UserProfile): string | null
   return step.options.find(o => (o.profilePatch[field] as string | undefined) === value)?.id ?? null;
 }
 
-function hasCommitted(step: WizardStep, profile: UserProfile): boolean {
-  if (step.field === 'powertrains') return profile.powertrains !== undefined;
-  return Boolean(profile[step.field]);
-}
-
 export default function HomePage() {
   const { language, t } = useLanguage();
   const navigate = useNavigate();
@@ -45,20 +40,6 @@ export default function HomePage() {
   const selectedId = useMemo(() => selectedOptionId(step, profile), [step, profile]);
 
   const canBack = stepIndex > 0 && !isFinished;
-  const canNext = hasCommitted(step, profile);
-
-  const goNext = useCallback(() => {
-    if (!canNext) return;
-    trackEvent('question_answered', { questionIndex: stepIndex });
-    if (stepIndex === wizardSteps.length - 1) {
-      sessionStorage.setItem(AUTO_REDIRECT_AFTER_FINISH_KEY, '1');
-    }
-    setOnboarding(prev => {
-      const flags = [...prev.answeredFlags] as [boolean, boolean, boolean, boolean, boolean];
-      if (stepIndex >= 0 && stepIndex < 5) flags[stepIndex] = true;
-      return { ...prev, answeredFlags: flags, stepIndex: Math.min(prev.stepIndex + 1, wizardSteps.length) };
-    });
-  }, [canNext, setOnboarding, stepIndex, wizardSteps.length]);
 
   const goSkip = useCallback(() => {
     trackEvent('question_skipped', { questionIndex: stepIndex });
@@ -133,7 +114,18 @@ export default function HomePage() {
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => updateProfile(option.profilePatch)}
+                    onClick={() => {
+                      updateProfile(option.profilePatch);
+                      // Auto-advance to next question after a short delay to show selection
+                      setTimeout(() => {
+                        setOnboarding(prev => {
+                          const flags = [...prev.answeredFlags] as [boolean, boolean, boolean, boolean, boolean];
+                          if (stepIndex >= 0 && stepIndex < 5) flags[stepIndex] = true;
+                          return { ...prev, answeredFlags: flags, stepIndex: Math.min(prev.stepIndex + 1, wizardSteps.length) };
+                        });
+                        trackEvent('question_answered', { questionIndex: stepIndex });
+                      }, 200);
+                    }}
                     className={clsx(
                       'min-h-[64px] rounded-2xl border px-4 py-3 text-left transition',
                       active
@@ -150,31 +142,21 @@ export default function HomePage() {
               })}
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={goBack}
-                  disabled={!canBack}
-                  className="btn-secondary disabled:opacity-40"
-                >
-                  {t({ vi: 'Quay lại', en: 'Back' })}
-                </button>
-                <button
-                  type="button"
-                  onClick={goSkip}
-                  className="btn-secondary border-transparent text-slate-500 hover:text-slate-900"
-                >
-                  {t({ vi: 'Bỏ qua', en: 'Skip' })}
-                </button>
-              </div>
+            <div className="mt-5 flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={goNext}
-                disabled={!canNext}
-                className="btn-primary px-6 py-2.5 disabled:bg-slate-300"
+                onClick={goBack}
+                disabled={!canBack}
+                className="btn-secondary disabled:opacity-40"
               >
-                {t({ vi: 'Câu tiếp theo', en: 'Next question' })}
+                {t({ vi: 'Quay lại', en: 'Back' })}
+              </button>
+              <button
+                type="button"
+                onClick={goSkip}
+                className="btn-secondary border-transparent text-slate-500 hover:text-slate-900"
+              >
+                {t({ vi: 'Bỏ qua', en: 'Skip' })}
               </button>
             </div>
           </div>

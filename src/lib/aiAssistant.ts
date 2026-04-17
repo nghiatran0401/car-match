@@ -16,6 +16,17 @@ export interface AssistantContext {
   adminPromptInstructions?: string;
 }
 
+export interface ProfileUpdateSuggestion {
+  field: keyof UserProfile;
+  value: string | string[];
+  reason: string;
+}
+
+export interface AssistantResponse {
+  reply: string;
+  profileUpdates?: ProfileUpdateSuggestion[];
+}
+
 function isVietnamese(language?: AppLanguage): boolean {
   return language !== 'en';
 }
@@ -264,6 +275,112 @@ function normalizeAssistantReply(raw: string): string {
   );
   const joined = relabeled.slice(0, 6).join('\n');
   return joined.trim();
+}
+
+function buildProfileExtractorPrompt(context: AssistantContext, lastUserMessage: string): string {
+  const vi = isVietnamese(context.language);
+  const currentProfile = JSON.stringify(context.profile, null, 2);
+  
+  if (vi) {
+    return `Ban la he thong phan tich nguoi dung. Nhiem vu: trich xuat thong tin moi tu cau hoi cua khach de cap nhat profile.
+
+Profile hien tai:
+${currentProfile}
+
+Cau hoi moi cua khach: "${lastUserMessage}"
+
+Cac truong co the cap nhat:
+- lifeStage: "first-time-buyer" | "young-professional" | "growing-family" | "established-family" | "executive-owner"
+- primaryUseNeed: "urban-commute" | "family-shuttle" | "business-travel" | "mixed-adventure"
+- drivingMix: "city-heavy" | "balanced" | "highway-heavy"
+- budgetBand: "under-1000" | "1000-1400" | "1400-1900" | "1900-plus" | "flexible"
+- powertrains: ["ice"] | ["hybrid"] | ["phev"] | ["ev"] | ["ice","hybrid"] | []
+
+Quy tac:
+1. Chi tra ve JSON khi phat hien thong tin MOI thuc su
+2. Neu khong co thong tin moi, tra ve {"updates": []}
+3. Phai co ly do ro rang cho moi cap nhat
+
+JSON format:
+{
+  "updates": [
+    {"field": "lifeStage", "value": "growing-family", "reason": "Khach de cap co con nho"}
+  ]
+}`;
+  }
+  
+  return `You are a user profile analyzer. Extract new information from the user's message to update their profile.
+
+Current profile:
+${currentProfile}
+
+User's new message: "${lastUserMessage}"
+
+Updatable fields:
+- lifeStage: "first-time-buyer" | "young-professional" | "growing-family" | "established-family" | "executive-owner"
+- primaryUseNeed: "urban-commute" | "family-shuttle" | "business-travel" | "mixed-adventure"
+- drivingMix: "city-heavy" | "balanced" | "highway-heavy"
+- budgetBand: "under-1000" | "1000-1400" | "1400-1900" | "1900-plus" | "flexible"
+- powertrains: ["ice"] | ["hybrid"] | ["phev"] | ["ev"] | ["ice","hybrid"] | []
+
+Rules:
+1. Only return JSON when you detect GENUINELY NEW information
+2. If no new info, return {"updates": []}
+3. Must have clear reason for each update
+
+JSON format:
+{
+  "updates": [
+    {"field": "lifeStage", "value": "growing-family", "reason": "Customer mentioned having young children"}
+  ]
+}`;
+}
+
+export async function extractProfileUpdates(
+  messages: AssistantMessage[],
+  context: AssistantContext,
+): Promise<ProfileUpdateSuggestion[]> {
+  const apiKey = import.meta.env.VITE_QWEN_API_KEY;
+  if (!apiKey) return [];
+
+  const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content;
+  if (!lastUserMessage) return [];
+
+  const baseUrl = import.meta.env.VITE_QWEN_API_BASE_URL || DEFAULT_BASE_URL;
+  const model = import.meta.env.VITE_QWEN_MODEL || DEFAULT_MODEL;
+
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: buildProfileExtractorPrompt(context, lastUserMessage) },
+          { role: 'user', content: 'Extract profile updates from my last message.' },
+        ],
+      }),
+    });
+
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as ChatCompletionResponse;
+    const output = data.choices?.[0]?.message?.content?.trim();
+    if (!output) return [];
+
+    // Extract JSON from response
+    const jsonMatch = output.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return [];
+
+    const parsed = JSON.parse(jsonMatch[0]) as { updates?: ProfileUpdateSuggestion[] };
+    return parsed.updates || [];
+  } catch {
+    return [];
+  }
 }
 
 export async function askQwenAssistant(messages: AssistantMessage[], context: AssistantContext): Promise<string> {
